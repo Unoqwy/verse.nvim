@@ -1,0 +1,45 @@
+local lsp_finder = require("verse.lsp_finder")
+local vproject = require("verse.project")
+
+local function default_cmd()
+  local lsp_bin = lsp_finder.find_lsp_binary()
+  if not lsp_bin or not vim.uv.fs_stat(lsp_bin) then
+    return vim.notify("Verse LSP server could not be found. Is the official VSCode extension installed?",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+  end
+
+  if vim.fn.executable(lsp_bin) == 0 then
+    local os = vim.uv.os_uname().sysname
+    local made_exec = false
+    if os == "Darwin" or os == "Linux" then
+      vim.fn.system({ "chmod", "+x", lsp_bin })
+      if vim.v.shell_error == 0 then
+        made_exec = true
+      end
+    end
+    if not made_exec then
+      return vim.notify("Verse LSP server is not executable and could not be made executable.",
+        vim.log.levels.WARN, { title = "verse.nvim" })
+    end
+  end
+
+  return { lsp_bin }
+end
+
+---@type vim.lsp.Config
+return {
+  name = "verse",
+  filetypes = { "verse" },
+  cmd = default_cmd(),
+  root_dir = function(bufnr, on_dir)
+    local fname = vim.api.nvim_buf_get_name(bufnr)
+    on_dir(vproject.find_root_dir(fname))
+  end,
+  before_init = function(params, config)
+    local workspace_folders = params["workspaceFolders"] or {}
+    local extra_folders = vproject.get_extra_workspaces_from_root_dir(config.root_dir)
+    vim.list_extend(workspace_folders, extra_folders)
+    params["workspaceFolders"] = workspace_folders
+  end,
+}
+
