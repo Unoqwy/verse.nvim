@@ -36,15 +36,22 @@ return {
     local fname = vim.api.nvim_buf_get_name(bufnr)
     on_dir(vproject.find_root_dir(fname))
   end,
+  reuse_client = function(client, config)
+    local root_dir = config.root_dir or vim.fn.expand("%:p:h")
+    local vproject_file = vproject.find_vproject_file(root_dir)
+    return vproject_file ~= nil and client.config["vproject_file"] == vproject_file
+  end,
   before_init = function(params, config)
-    local workspace_folders = params["workspaceFolders"] or {}
-    local extra_folders = vproject.get_workspace_folders_from_root_dir(config.root_dir)
+    local root_dir = config.root_dir or vim.fn.expand("%:p:h")
+    local lsp_workspace_folders = params["workspaceFolders"] or {}
+    local project_folders, vproject_file = vproject.get_workspace_folders_from_root_dir(root_dir)
     if verse.config ~= nil and verse.config.vproject_workspace_folders_only == true then
-      workspace_folders = extra_folders
+      lsp_workspace_folders = project_folders
     else
-      vim.list_extend(workspace_folders, extra_folders)
+      vim.list_extend(lsp_workspace_folders, project_folders)
     end
-    params["workspaceFolders"] = workspace_folders
+    params["workspaceFolders"] = lsp_workspace_folders
+    config["vproject_file"] = vproject_file
   end,
 }
 

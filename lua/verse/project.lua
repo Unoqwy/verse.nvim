@@ -48,18 +48,20 @@ local function find_in_dir(dir, pat)
   return result
 end
 
---- Gets required LSP workspace folders to register for a Verse project to load properly.
---- @param root_dir string Root directory path
---- @return lsp.WorkspaceFolder[]
-function M.get_workspace_folders_from_root_dir(root_dir)
+--- Finds the .vproject file relevant to the given file.
+--- @param root_dir string Root direcotry path
+--- @return string? vproject_file, string? project_name
+function M.find_vproject_file(root_dir)
+  root_dir = vim.fs.normalize(root_dir)
+
   -- look for .vproject file directly
   local vproject_search_result = find_in_dir(root_dir, ".vproject$")
   if #vproject_search_result > 1 then
     vim.notify("Found several .vproject files in root directory.",
       vim.log.levels.WARN, { title = "verse.nvim" })
-    return {}
+    return nil, nil
   elseif #vproject_search_result == 1 then
-    return M.get_workspace_folders_from_vproject(vproject_search_result[1])
+    return vproject_search_result[1]
   end
 
   -- if we are in a UEFN project, find .vproject from AppData
@@ -68,7 +70,7 @@ function M.get_workspace_folders_from_root_dir(root_dir)
   if #uefnproject_search_result > 1 then
     vim.notify("Found several .uefnproject files in root directory.",
       vim.log.levels.WARN, { title = "verse.nvim" })
-    return {}
+    return nil, project_name
   elseif #uefnproject_search_result == 1 then
     project_name = vim.fn.fnamemodify(uefnproject_search_result[1], ":t:r")
   end
@@ -78,14 +80,46 @@ function M.get_workspace_folders_from_root_dir(root_dir)
     local vproject_file = vim.fs.joinpath(appdata_dir,
       "UnrealEditorFortnite", "Saved", "VerseProject", project_name, "vproject", project_name .. ".vproject")
     if vim.uv.fs_stat(vproject_file) then
-      return M.get_workspace_folders_from_vproject(vproject_file)
+      return vproject_file, project_name
     end
   end
 
-  -- attempt to fall back on the generated .code-workspace file
+  -- maybe we're in a VerseProject directory and need to ping pong
+  local verseprojects_dir_search_result = vim.fs.find(
+    "VerseProject",
+    { path = root_dir, type = "directory", limit = 1, upward = true }
+  )
+  if #verseprojects_dir_search_result > 0 then
+    local verseprojects_dir = verseprojects_dir_search_result[1]
+    project_name = root_dir:sub(#verseprojects_dir + 2):match("([^/]+)")
+    local verseproject_dir = vim.fs.joinpath(verseprojects_dir, project_name)
+    if verseproject_dir ~= nil then
+      vproject_search_result = vim.fs.find(
+        file_match(".vproject$"),
+        { path = verseproject_dir, type = "file", limit = 1, upward = false }
+      )
+      if #vproject_search_result > 0 then
+        return vproject_search_result[1], project_name
+      end
+    end
+  end
+
+  return nil, project_name
+end
+
+--- Gets required LSP workspace folders to register for a Verse project to load properly.
+--- @param root_dir string Root directory path
+--- @return lsp.WorkspaceFolder[] workspace_folders, string? vproject_file
+function M.get_workspace_folders_from_root_dir(root_dir)
+  local vproject_file, project_name = M.find_vproject_file(root_dir)
+  if vproject_file ~= nil then
+    return M.get_workspace_folders_from_vproject_file(vproject_file), vproject_file
+  end
+
+  -- attempt to fall back on the folders from the generated .code-workspace file
   local codews_search_result = vim.fs.find(
     project_name .. ".code-workspace",
-    { path = root_dir, type = "file", limit = 1 }
+    { path = root_dir, type = "file", limit = 1, upward = false }
   )
   if #codews_search_result > 0 then
     local file_contents = table.concat(vim.fn.readfile(codews_search_result[1]), "\n")
@@ -106,14 +140,14 @@ function M.get_workspace_folders_from_root_dir(root_dir)
         })
       end
       if #result > 0 then
-        return result
+        return result, nil
       end
     end
   end
 
   vim.notify("Couldn't find Verse project, open a file from a UEFN project or create a .vproject file.",
     vim.log.levels.WARN, { title = "verse.nvim" })
-  return {}
+  return {}, nil
 end
 
 --- Returns the "volume prefix" part of a path.
@@ -153,7 +187,7 @@ end
 --- Gets required LSP workspace folders to register for a .vproject to work as intended.
 --- @param vproject_file string .vproject file path
 --- @return lsp.WorkspaceFolder[]
-function M.get_workspace_folders_from_vproject(vproject_file)
+function M.get_workspace_folders_from_vproject_file(vproject_file)
   vproject_file = vim.fs.normalize(vproject_file)
   local file_contents = table.concat(vim.fn.readfile(vproject_file), "\n")
   local json = vim.json.decode(file_contents)
