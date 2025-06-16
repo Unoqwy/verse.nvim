@@ -1,3 +1,4 @@
+local verse = require("verse")
 local lsp_finder = require("verse.lsp_finder")
 local vproject = require("verse.project")
 
@@ -37,8 +38,12 @@ return {
   end,
   before_init = function(params, config)
     local workspace_folders = params["workspaceFolders"] or {}
-    local extra_folders = vproject.get_extra_workspaces_from_root_dir(config.root_dir)
-    vim.list_extend(workspace_folders, extra_folders)
+    local extra_folders = vproject.get_workspace_folders_from_root_dir(config.root_dir)
+    if verse.config ~= nil and verse.config.vproject_workspace_folders_only == true then
+      workspace_folders = extra_folders
+    else
+      vim.list_extend(workspace_folders, extra_folders)
+    end
     params["workspaceFolders"] = workspace_folders
   end,
 }
