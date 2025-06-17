@@ -51,7 +51,12 @@ return {
       vim.list_extend(lsp_workspace_folders, project_folders)
     end
     params["workspaceFolders"] = lsp_workspace_folders
+    config.workspace_folders = lsp_workspace_folders
     config["vproject_file"] = vproject_file
+  end,
+  on_init = function(client, _)
+    -- sync client state for list_workspace_folders() to work properly
+    client.workspace_folders = client.config.workspace_folders
   end,
 }
 

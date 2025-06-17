@@ -7,12 +7,12 @@ local M = {}
 --- Whether to exclusively register workspace folders that are packages in the .vproject file,
 --- ignoring the default(s).
 --- In practice, the LSP server ignores all other workspaces, so registering them is likely unwanted.
---- @field vproject_workspace_folders_only boolean
+--- @field vproject_workspace_folders_only? boolean
 ---
 --- Whether to automatically delete ._ (AppleDouble) files when writing to a non-Mac
 --- file system from a MacOS host. Those files confuse the Verse LSP server.
 --- Only relevant on MacOS.
---- @field macos_auto_delete_annoying_files boolean
+--- @field macos_auto_delete_annoying_files? boolean
 
 --- @type VerseNvimConfig
 local config_defaults = {
@@ -20,7 +20,7 @@ local config_defaults = {
   macos_auto_delete_annoying_files = true,
 }
 
---- @param opts VerseNvimConfig
+--- @param opts? VerseNvimConfig
 function M.setup(opts)
   opts = opts or {}
   opts = vim.tbl_extend("keep", opts, config_defaults)

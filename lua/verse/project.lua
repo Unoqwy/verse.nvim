@@ -107,13 +107,24 @@ function M.find_vproject_file(root_dir)
   return nil, project_name
 end
 
+--- @class VerseProjectGetWorkspaceFoldersOpts
+---
+--- Whether to allow the use of a virtual .vproject when the paths
+--- linked in the original .vproject are known to be incorrect and can be corrected.
+--- @field allow_virtual_vproject? boolean
+---
+--- Whether to prevent creating a temporary file for the virtual .vproject file.
+--- This should remain `false` when the resulting workspace folders will be fed to the LSP server.
+--- @field read_only? boolean
+
 --- Gets required LSP workspace folders to register for a Verse project to load properly.
 --- @param root_dir string Root directory path
+--- @param opts? VerseProjectGetWorkspaceFoldersOpts
 --- @return lsp.WorkspaceFolder[] workspace_folders, string? vproject_file
-function M.get_workspace_folders_from_root_dir(root_dir)
+function M.get_workspace_folders_from_root_dir(root_dir, opts)
   local vproject_file, project_name = M.find_vproject_file(root_dir)
   if vproject_file ~= nil then
-    return M.get_workspace_folders_from_vproject_file(vproject_file), vproject_file
+    return M.get_workspace_folders_from_vproject_file(vproject_file, opts), vproject_file
   end
 
   -- attempt to fall back on the folders from the generated .code-workspace file
@@ -156,13 +167,10 @@ local function get_volume_prefix(path)
   return path:match("^(.-)/Users/")
 end
 
---- Creates a virtual .vproject file with file paths adapted to the desired volume prefix.
---- This is only used when the host system is not Windows.
+--- Remaps vproject JSON with file paths adapted to the desired volume prefix.
 --- @param json table Decoded JSON of the original .vproject
 --- @param desired_volume_prefix string Desired volume prefix to conform the packages to
-local function create_virtual_vproject(json, desired_volume_prefix)
-  local tmp_dir = vim.uv.fs_mkdtemp(vim.uv.os_tmpdir() .. "/vvproj.XXXXXXXX")
-
+local function remap_json_to_virtual_vproject(json, desired_volume_prefix)
   for _, package in ipairs(json["packages"]) do
     local desc = package["desc"]
     if desc ~= nil then
@@ -173,21 +181,19 @@ local function create_virtual_vproject(json, desired_volume_prefix)
       end
     end
   end
-
-  local file_contents = vim.json.encode(json)
-  local tmp_vproject_file = vim.fs.joinpath(tmp_dir, "virtual.vproject")
-  local fd = vim.uv.fs_open(tmp_vproject_file, "w", tonumber("644", 8))
-  if fd ~= nil then
-    vim.uv.fs_write(fd, file_contents, -1)
-    vim.uv.fs_close(fd)
-    return tmp_vproject_file
-  end
 end
 
 --- Gets required LSP workspace folders to register for a .vproject to work as intended.
 --- @param vproject_file string .vproject file path
+--- @param opts? VerseProjectGetWorkspaceFoldersOpts
 --- @return lsp.WorkspaceFolder[]
-function M.get_workspace_folders_from_vproject_file(vproject_file)
+function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
+  opts = opts or {}
+  opts = vim.tbl_extend("keep", opts, {
+    allow_virtual_vproject = true,
+    read_only = false,
+  })
+
   vproject_file = vim.fs.normalize(vproject_file)
   local file_contents = table.concat(vim.fn.readfile(vproject_file), "\n")
   local json = vim.json.decode(file_contents)
@@ -203,11 +209,12 @@ function M.get_workspace_folders_from_vproject_file(vproject_file)
     return {}
   end
 
+  --- @type string?
   local vproject_root_dir = vim.fs.dirname(vproject_file)
 
   -- since UEFN is currently Windows only, this is a hack to allow
   -- opening files under a virtual machine from the host system
-  if vim.uv.os_uname().sysname ~= "Windows_NT" then
+  if opts.allow_virtual_vproject and vim.uv.os_uname().sysname ~= "Windows_NT" then
     local expected_volume_prefix = get_volume_prefix(vproject_file)
     local use_virtual_vproject = false
     for _, package in ipairs(packages) do
@@ -222,20 +229,35 @@ function M.get_workspace_folders_from_vproject_file(vproject_file)
     end
 
     if use_virtual_vproject then
-      vproject_root_dir = create_virtual_vproject(json, expected_volume_prefix)
-      if vproject_root_dir == nil then
-        vim.notify("Failed to create virtual .vproject to circumvent external files of " .. vproject_file,
-          vim.log.levels.WARN, { title = "verse.nvim" })
-        return {}
+      remap_json_to_virtual_vproject(json, expected_volume_prefix)
+      if opts.read_only then
+        vproject_root_dir = nil
+      else
+        local tmp_dir = vim.uv.fs_mkdtemp(vim.uv.os_tmpdir() .. "/vvproj.XXXXXXXX")
+        local new_file_contents = vim.json.encode(json)
+        local tmp_vproject_file = vim.fs.joinpath(tmp_dir, "virtual.vproject")
+        local fd = vim.uv.fs_open(tmp_vproject_file, "w", tonumber("644", 8))
+        if fd ~= nil then
+          vim.uv.fs_write(fd, new_file_contents, -1)
+          vim.uv.fs_close(fd)
+          vproject_root_dir = tmp_vproject_file
+        else
+          vim.notify("Failed to create virtual .vproject to circumvent external files of " .. vproject_file,
+            vim.log.levels.WARN, { title = "verse.nvim" })
+          return {}
+        end
       end
     end
   end
 
-  local vproject_result_entry = {
-    name = vproject_root_dir,
-    uri = vim.uri_from_fname(vproject_root_dir),
-  }
-  local result = { vproject_result_entry }
+  local result = {}
+  if vproject_root_dir ~= nil then
+    local vproject_result_entry ={
+      name = vproject_root_dir,
+      uri = vim.uri_from_fname(vproject_root_dir),
+    }
+    table.insert(result, vproject_result_entry)
+  end
   for _, package in ipairs(packages) do
     local desc = package["desc"]
     if desc ~= nil then
@@ -257,6 +279,77 @@ function M.get_workspace_folders_from_vproject_file(vproject_file)
     end
   end
   return result
+end
+
+--- @class VerseProjectGetActiveWorkspaceFoldersOpts
+--- @field bufnr? integer Target buffer number
+
+--- Gets the workspace folders of the currently active project.
+--- If the LSP server is not running, defaults back to finding required workspace folders.
+--- @param opts VerseProjectGetActiveWorkspaceFoldersOpts
+function M.get_active_workspace_folders(opts)
+  opts = opts or {}
+  local bufnr = opts.bufnr or 0
+  local verse_lsp_clients = vim.lsp.get_clients({
+    bufnr = bufnr,
+    name = "verse",
+  })
+  local workspace_folders = {}
+  for _, client in ipairs(verse_lsp_clients) do
+    if client.workspace_folders ~= nil then
+      vim.list_extend(workspace_folders, client.workspace_folders)
+    end
+  end
+
+  if #workspace_folders < 1 then
+    local root_dir = M.find_root_dir(vim.fn.expand("%:p"))
+    if root_dir == nil then
+      vim.notify("Couldn't find a running LSP server or a project root to list digest files",
+        vim.log.levels.WARN, { title = "verse.nvim" })
+      return {}
+    end
+
+    local project_folders, _ = M.get_workspace_folders_from_root_dir(root_dir, {
+      read_only = true,
+    })
+    workspace_folders = project_folders
+  end
+
+  return workspace_folders
+end
+
+--- Lists the relevant .digest.verse files of the current project.
+--- @param opts VerseProjectGetActiveWorkspaceFoldersOpts
+--- @return string[] # Digest file names
+function M.list_digest_files(opts)
+  local workspace_folders = M.get_active_workspace_folders(opts)
+  local digest_files = {}
+  for _, workspace_folder in ipairs(workspace_folders) do
+    local search_result = vim.fs.find(
+      file_match(".digest.verse$"),
+      { path = workspace_folder.name, type = "file", limit = math.huge, upward = false }
+    )
+    vim.list_extend(digest_files, search_result)
+  end
+  return digest_files
+end
+
+--- `list_digest_files` is blocking and can be noticeably slow on large projects.
+--- This provides a file finder shell command to feed fzf or whatever picker.
+--- Uses the `fd` command.
+--- @return string
+function M.list_digest_files_cmd(opts)
+  local workspace_folders = M.get_active_workspace_folders(opts)
+
+  local fd_bin = "fd"
+  if vim.fn.executable("fdfind") == 1 then
+    fd_bin = "fdfind"
+  end
+  local cmd = fd_bin .. " --color=never --type f --type l \\.digest.verse$"
+  for _, workspace_folder in ipairs(workspace_folders) do
+    cmd = cmd .. " " .. vim.fn.shellescape(workspace_folder.name)
+  end
+  return cmd
 end
 
 return M
