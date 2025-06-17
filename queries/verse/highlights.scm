@@ -12,6 +12,8 @@
 
 (function_call
   function: (identifier) @function)
+(of_expression
+  lhs: (identifier) @function)
 (field_expression
   field: (identifier) @variable.member)
 (function_call
@@ -93,7 +95,7 @@
 
 (macro_call
   macro: (identifier) @keyword
-  (#match? @keyword "^(class|enum|interface|profile|using|map|array|spawn|sync|race|rush|branch)$"))
+  (#match? @keyword "^(class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch)$"))
 
 (macro_call
   macro: (identifier) @keyword.conditional
@@ -151,6 +153,7 @@
   "and"
   "or"
   "not"
+  "of"
 ] @keyword.operator
 
 (attributes
