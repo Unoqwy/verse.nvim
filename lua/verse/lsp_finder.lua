@@ -20,6 +20,8 @@ local function get_matching_dirs(base, match)
   return dirs
 end
 
+--- Finds the most recent installed version of epicgames.verse VSCode extension.
+--- @return string? # Extension directory path
 local function find_installed_extension()
   local home = vim.fn.expand("$HOME")
   local ext_parent_dirs = {
@@ -30,13 +32,25 @@ local function find_installed_extension()
 
   local all_matching_dirs = {}
   for _, path in ipairs(ext_parent_dirs) do
-    vim.list_extend(all_matching_dirs, get_matching_dirs(path, "^epicgames.verse"))
+    for _, matching_dir in ipairs(get_matching_dirs(path, "^epicgames.verse")) do
+      table.insert(all_matching_dirs, {
+        dir = matching_dir,
+        ext_version = vim.fs.basename(matching_dir):gsub("^epicgames.verse%-", ""),
+      })
+    end
+  end
+  if #all_matching_dirs < 1 then
+    return nil
   end
 
-  table.sort(all_matching_dirs, function(a, b) return a > b end)
-  return all_matching_dirs[1]
+  table.sort(all_matching_dirs, function(a, b)
+    return a.ext_version > b.ext_version
+  end)
+  return all_matching_dirs[1].dir
 end
 
+--- Finds the Verse LSP server binary.
+--- @return string?
 function M.find_lsp_binary()
   local latest_ext_dir = find_installed_extension()
   if not latest_ext_dir then
