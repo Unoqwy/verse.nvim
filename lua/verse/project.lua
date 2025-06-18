@@ -107,7 +107,7 @@ function M.find_vproject_file(root_dir)
   return nil, project_name
 end
 
---- @class VerseProjectGetWorkspaceFoldersOpts
+--- @class verse.project.GetWorkspaceFoldersOpts
 ---
 --- Whether to allow the use of a virtual .vproject when the paths
 --- linked in the original .vproject are known to be incorrect and can be corrected.
@@ -119,7 +119,7 @@ end
 
 --- Gets required LSP workspace folders to register for a Verse project to load properly.
 --- @param root_dir string Root directory path
---- @param opts? VerseProjectGetWorkspaceFoldersOpts
+--- @param opts? verse.project.GetWorkspaceFoldersOpts
 --- @return lsp.WorkspaceFolder[] workspace_folders, string? vproject_file
 function M.get_workspace_folders_from_root_dir(root_dir, opts)
   local vproject_file, project_name = M.find_vproject_file(root_dir)
@@ -185,7 +185,7 @@ end
 
 --- Gets required LSP workspace folders to register for a .vproject to work as intended.
 --- @param vproject_file string .vproject file path
---- @param opts? VerseProjectGetWorkspaceFoldersOpts
+--- @param opts? verse.project.GetWorkspaceFoldersOpts
 --- @return lsp.WorkspaceFolder[]
 function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   opts = opts or {}
@@ -281,12 +281,13 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   return result
 end
 
---- @class VerseProjectGetActiveWorkspaceFoldersOpts
+--- @class verse.project.GetActiveWorkspaceFoldersOpts
 --- @field bufnr? integer Target buffer number
 
 --- Gets the workspace folders of the currently active project.
 --- If the LSP server is not running, defaults back to finding required workspace folders.
---- @param opts VerseProjectGetActiveWorkspaceFoldersOpts
+--- @param opts? verse.project.GetActiveWorkspaceFoldersOpts
+--- @return lsp.WorkspaceFolder[]
 function M.get_active_workspace_folders(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or 0
@@ -319,7 +320,7 @@ function M.get_active_workspace_folders(opts)
 end
 
 --- Lists the relevant .digest.verse files of the current project.
---- @param opts VerseProjectGetActiveWorkspaceFoldersOpts
+--- @param opts? verse.project.GetActiveWorkspaceFoldersOpts
 --- @return string[] # Digest file names
 function M.list_digest_files(opts)
   local workspace_folders = M.get_active_workspace_folders(opts)
@@ -337,7 +338,8 @@ end
 --- `list_digest_files` is blocking and can be noticeably slow on large projects.
 --- This provides a file finder shell command to feed fzf or whatever picker.
 --- Uses the `fd` command.
---- @return string
+--- @param opts? verse.project.GetActiveWorkspaceFoldersOpts
+--- @return string # Command line
 function M.list_digest_files_cmd(opts)
   local workspace_folders = M.get_active_workspace_folders(opts)
 
@@ -353,4 +355,3 @@ function M.list_digest_files_cmd(opts)
 end
 
 return M
-
