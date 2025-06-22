@@ -63,19 +63,6 @@
   type_hint: (identifier) @type.builtin
   (#match? @type.builtin "^(void|string|int|float|logic)$"))
 
-; Attributes
-(at_attributes
-  ["@"] @attribute
-  (identifier) @attribute)
-
-(at_attributes
-  ["@"] @attribute
-  (macro_call
-    macro: (identifier) @attribute))
-
-(attributes
-  (identifier) @attribute)
-
 ; Builtin macros
 (declaration
   lhs: "("*
@@ -105,6 +92,23 @@
 (macro_call
   macro: (identifier) @keyword.repeat
   (#match? @keyword.repeat "^(for|loop)$"))
+
+; Attributes
+(at_attributes
+  ["@"] @attribute
+  (identifier) @attribute)
+
+(at_attributes
+  ["@"] @attribute
+  (macro_call
+    macro: (identifier) @attribute))
+
+(attributes
+  (identifier) @attribute)
+
+(attributes
+  (macro_call
+    macro: (identifier) @attribute))
 
 ; Tokens
 [
