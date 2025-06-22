@@ -11,6 +11,7 @@
   * [x] Commands
   * [ ] Progress reporting
   * [ ] Build state
+- [x] WSL support
 
 ## Installation
 

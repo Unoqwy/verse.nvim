@@ -110,12 +110,17 @@ end
 --- @class verse.project.GetWorkspaceFoldersOpts
 ---
 --- Whether to allow the use of a virtual .vproject when the paths
---- linked in the original .vproject are known to be incorrect and can be corrected.
+--- linked in the original .vproject are known to be incorrect and can be remapped.
+--- A virtual .vproject is only necessary when opening Windows files from a non-Windows system
+--- (i.e. VM host, WSL running Linux LSP binary).
 --- @field allow_virtual_vproject? boolean
 ---
 --- Whether to prevent creating a temporary file for the virtual .vproject file.
 --- This should remain `false` when the resulting workspace folders will be fed to the LSP server.
 --- @field read_only? boolean
+---
+--- The LSP server binary to be used. Used as context to help knowing whether a virtual vproject is desired.
+--- @field lsp_bin? string
 
 --- Gets required LSP workspace folders to register for a Verse project to load properly.
 --- @param root_dir string Root directory path
@@ -167,20 +172,43 @@ local function get_volume_prefix(path)
   return path:match("^(.-)/Users/")
 end
 
+--- Conforms a path to the desired volume prefix.
+--- @param original_path string
+--- @param desired_volume_prefix string
+--- @return string
+local function conform_volume_prefix(original_path, desired_volume_prefix)
+  local path_post_volume = original_path:match("^.-(/Users/.+)$")
+  return vim.fs.joinpath(desired_volume_prefix, path_post_volume)
+end
+
 --- Remaps vproject JSON with file paths adapted to the desired volume prefix.
 --- @param json table Decoded JSON of the original .vproject
 --- @param desired_volume_prefix string Desired volume prefix to conform the packages to
+--- @return nil # Json remapped in place
 local function remap_json_to_virtual_vproject(json, desired_volume_prefix)
   for _, package in ipairs(json["packages"]) do
     local desc = package["desc"]
     if desc ~= nil then
       local dir_path = desc["dirPath"]
       if dir_path ~= nil then
-        local path_post_volume = dir_path:match("^.-(/Users/.+)$")
-        desc["dirPath"] = vim.fs.joinpath(desired_volume_prefix, path_post_volume)
+        desc["dirPath"] = conform_volume_prefix(dir_path, desired_volume_prefix)
       end
     end
   end
+end
+
+--- @param opts verse.project.GetWorkspaceFoldersOpts
+local function consider_using_virtual_vproject(opts)
+  local uname = vim.uv.os_uname()
+  if uname.sysname ~= "Windows_NT" then
+    if opts.lsp_bin ~= nil then
+      -- don't want to use vproject when using Windows layer .exe from WSL
+      return not opts.lsp_bin:match(".exe$")
+    else
+      return true
+    end
+  end
+  return false
 end
 
 --- Gets required LSP workspace folders to register for a .vproject to work as intended.
@@ -212,9 +240,7 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   --- @type string?
   local vproject_root_dir = vim.fs.dirname(vproject_file)
 
-  -- since UEFN is currently Windows only, this is a hack to allow
-  -- opening files under a virtual machine from the host system
-  if opts.allow_virtual_vproject and vim.uv.os_uname().sysname ~= "Windows_NT" then
+  if opts.allow_virtual_vproject and consider_using_virtual_vproject(opts) then
     local expected_volume_prefix = get_volume_prefix(vproject_file)
     local use_virtual_vproject = false
     for _, package in ipairs(packages) do
@@ -228,6 +254,7 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
       end
     end
 
+    -- only use a virtual vproject if one of the paths would actually need remapping
     if use_virtual_vproject then
       remap_json_to_virtual_vproject(json, expected_volume_prefix)
       if opts.read_only then
@@ -247,6 +274,23 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
           return {}
         end
       end
+    end
+  elseif vproject_file:match("^/mnt/") and require("verse.compat").using_wsl() then
+    -- remap vproject directory path when under WSL to conform to volume prefix from `packages`
+    local volume_prefix = get_volume_prefix(vproject_root_dir)
+    local actual_volume_prefix = nil
+    for _, package in ipairs(packages) do
+      local desc = package["desc"]
+      if desc ~= nil then
+        local dir_path = desc["dirPath"]
+        if dir_path ~= nil and get_volume_prefix(dir_path) ~= volume_prefix then
+          actual_volume_prefix = get_volume_prefix(dir_path)
+          break
+        end
+      end
+    end
+    if actual_volume_prefix ~= nil and vproject_root_dir ~= nil then
+      vproject_root_dir = conform_volume_prefix(vproject_root_dir, actual_volume_prefix)
     end
   end
 

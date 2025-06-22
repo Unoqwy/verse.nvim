@@ -40,21 +40,39 @@ return {
     return vproject_file ~= nil and client.config["vproject_file"] == vproject_file
   end,
   before_init = function(params, config)
+    local lsp_bin = type(config.cmd) == "table" and config.cmd[1] or nil
+
+    local compat = require("verse.compat")
+    if lsp_bin ~= nil and compat.using_wsl() and lsp_bin:match(".exe$") then
+      config["verse_wsl_exe_compat"] = true
+      compat.inject_incoming_wsl_path_transformer()
+    end
+
     local root_dir = config.root_dir or vim.fn.expand("%:p:h")
+    local project_folders, vproject_file = vproject
+      .get_workspace_folders_from_root_dir(root_dir, { lsp_bin = lsp_bin })
+    config["vproject_file"] = vproject_file
+
     local lsp_workspace_folders = params["workspaceFolders"] or {}
-    local project_folders, vproject_file = vproject.get_workspace_folders_from_root_dir(root_dir)
     if require("verse").get_config().vproject_workspace_folders_only then
       lsp_workspace_folders = project_folders
     else
       vim.list_extend(lsp_workspace_folders, project_folders)
     end
     params["workspaceFolders"] = lsp_workspace_folders
-    config.workspace_folders = lsp_workspace_folders
-    config["vproject_file"] = vproject_file
+    if config["verse_wsl_exe_compat"] then
+      config.workspace_folders = compat.lsp_to_nvim_workspace_folders(lsp_workspace_folders)
+    else
+      config.workspace_folders = lsp_workspace_folders
+    end
   end,
   on_init = function(client, _)
     -- sync client state for list_workspace_folders() to work properly
     client.workspace_folders = client.config.workspace_folders
+
+    if client.config["verse_wsl_exe_compat"] then
+      require("verse.compat").inject_outgoing_wsl_path_transformer(client)
+    end
   end,
 }
 

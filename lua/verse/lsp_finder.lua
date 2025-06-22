@@ -21,9 +21,10 @@ local function get_matching_dirs(base, match)
 end
 
 --- Finds the most recent installed version of epicgames.verse VSCode extension.
+--- @param home_dir string? Use specific user home directory
 --- @return string? # Extension directory path
-local function find_installed_extension()
-  local home = vim.fn.expand("$HOME")
+function M._find_installed_extension(home_dir)
+  local home = home_dir or vim.fn.expand("$HOME")
   local ext_parent_dirs = {
     vim.fs.joinpath(home, ".vscode", "extensions"),
     vim.fs.joinpath(home, ".cursor", "extensions"),
@@ -52,19 +53,40 @@ end
 --- Finds the Verse LSP server binary.
 --- @return string?
 function M.find_lsp_binary()
-  local latest_ext_dir = find_installed_extension()
-  if not latest_ext_dir then
+  local using_wsl = require("verse.compat").using_wsl()
+
+  local latest_ext_dir = M._find_installed_extension()
+  if using_wsl and latest_ext_dir == nil then
+    local win_user_dir = require("verse.compat").get_wsl_windows_user_directory()
+    if win_user_dir ~= nil then
+      latest_ext_dir = M._find_installed_extension(win_user_dir)
+    end
+  end
+  if latest_ext_dir == nil then
     return nil
   end
 
   local bin_dir = vim.fs.joinpath(latest_ext_dir, "bin")
-  local os = vim.uv.os_uname().sysname
-  if os == "Windows_NT" then
-    return vim.fs.joinpath(bin_dir, "Win64", "verse-lsp.exe")
-  elseif os == "Darwin" then
-    return vim.fs.joinpath(bin_dir, "Mac", "verse-lsp")
-  elseif os == "Linux" then
-    return vim.fs.joinpath(bin_dir, "Linux", "verse-lsp")
+  local uname = vim.uv.os_uname()
+
+  if using_wsl then
+    if vim.uv.os_uname().machine == "aarch64" then
+      -- at the moment there is no provided arm64 linux LSP server binary
+      -- so let's use the .exe to run on Windows layer that has arm64->x86_64 translation
+      -- this effectively limits the LSP to opening vprojects only from the Windows filesystem
+      -- and also requires the file path transformer from verse.compat
+      return vim.fs.joinpath(latest_ext_dir, "bin", "Win64", "verse-lsp.exe")
+    end
+    return vim.fs.joinpath(latest_ext_dir, "bin", "Linux", "verse-lsp")
+  else
+    local os = uname.sysname
+    if os == "Windows_NT" then
+      return vim.fs.joinpath(bin_dir, "Win64", "verse-lsp.exe")
+    elseif os == "Darwin" then
+      return vim.fs.joinpath(bin_dir, "Mac", "verse-lsp")
+    elseif os == "Linux" then
+      return vim.fs.joinpath(bin_dir, "Linux", "verse-lsp")
+    end
   end
 end
 
