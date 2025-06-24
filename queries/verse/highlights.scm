@@ -8,20 +8,29 @@
 (integer) @number
 (float) @number
 (logic_literal) @keyword
-(path_literal) @string.special
+(path_literal) @module
+
+(identifier) @variable
+((identifier) @variable.builtin
+  (#match? @variable.builtin "^(Self)$"))
 
 (function_call
   function: (identifier) @function)
 (of_expression
   lhs: (identifier) @function)
+
+([
+  (function_call
+    function: (identifier) @keyword)
+  (of_expression
+    lhs: (identifier) @keyword)
+] (#match? @keyword "^(import)$"))
+
 (field_expression
   field: (identifier) @variable.member)
 (function_call
   function: (field_expression
     field: (identifier) @function))
-
-(function_declaration
-  name: (_) @function)
 
 (declaration
   lhs: "("*
@@ -36,13 +45,14 @@
 (named_argument
   name: (identifier) @variable.parameter)
 
+; Type references
+(unary_expression
+  operator: "?"
+  operand: (identifier) @type)
 (map_container
   key: (identifier) @type)
 (map_container
   value: (identifier) @type)
-(unary_expression
-  operator: "?"
-  operand: (identifier) @type)
 (array_container
   value: (identifier) @type)
 (function_declaration
@@ -50,39 +60,60 @@
 (declaration
   type_hint: (identifier) @type)
 
-(map_container
-  key: (identifier) @type.builtin
-  (#match? @type.builtin "^(void|string|int|float|logic)$"))
-(map_container
-  value: (identifier) @type.builtin
-  (#match? @type.builtin "^(void|string|int|float|logic)$"))
-(function_declaration
-  ret_type: (identifier) @type.builtin
-  (#match? @type.builtin "^(void|string|int|float|logic)$"))
-(declaration
-  type_hint: (identifier) @type.builtin
-  (#match? @type.builtin "^(void|string|int|float|logic)$"))
+([
+  (unary_expression
+    operator: "?"
+    operand: (identifier) @type.builtin)
+  (map_container
+    key: (identifier) @type.builtin)
+  (map_container
+    value: (identifier) @type.builtin)
+  (array_container
+    value: (identifier) @type.builtin)
+  (function_declaration
+    ret_type: (identifier) @type.builtin)
+  (declaration
+    type_hint: (identifier) @type.builtin)
+] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|any)$"))
+
+; Archetype
+(macro_call
+  macro: (identifier) @type
+  (block
+    (declaration)*))
+(macro_call
+  macro: (identifier)
+  (block
+    (declaration
+      lhs: (identifier) @variable.member)))
 
 ; Builtin macros
+([
+  (declaration
+    lhs: "("*
+    lhs: (identifier) @type
+    rhs: (macro_call
+      macro: (identifier) @_))
+  (declaration
+    rhs: (macro_call
+      macro: (identifier) @_
+      arguments: (argument_list
+        (identifier) @type)))
+] (#match? @_ "^(struct|class|enum|interface)$"))
+
 (declaration
   lhs: "("*
-  lhs: (identifier) @type
+  lhs: (identifier) @module
   rhs: (macro_call
-    macro: (identifier) @_
-  (#match? @_ "^(class|enum|interface)$")))
-(declaration
-  rhs: (macro_call
-    macro: (identifier) @_
-    arguments: (argument_list
-      (identifier) @type)
-  (#match? @_ "^(class|enum|interface)$")))
+    macro: (identifier) @_)
+  (#match? @_ "^(module)$"))
 
 (macro_call
   macro: (identifier) @function.macro)
 
 (macro_call
   macro: (identifier) @keyword
-  (#match? @keyword "^(class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch)$"))
+  (#match? @keyword "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer)$"))
 
 (macro_call
   macro: (identifier) @keyword.conditional
@@ -91,7 +122,14 @@
 
 (macro_call
   macro: (identifier) @keyword.repeat
-  (#match? @keyword.repeat "^(for|loop)$"))
+  (#match? @keyword.repeat "^(for|loop|while|do)$"))
+
+; Function declaration
+(function_declaration
+  name: (_) @function)
+(function_declaration
+  (declaration
+    lhs: (identifier) @variable.parameter))
 
 ; Attributes
 (at_attributes
