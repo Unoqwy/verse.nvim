@@ -66,7 +66,7 @@ function M.setup(config)
 
   M.register_commands()
 
-  if vim.uv.os_uname().sysname == "Darwin" and not config.macos_auto_delete_annoying_files then
+  if vim.uv.os_uname().sysname == "Darwin" and config.macos_auto_delete_annoying_files then
     vim.api.nvim_create_autocmd("BufWritePost", {
       pattern = "*.verse",
       callback = function()
