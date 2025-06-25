@@ -113,7 +113,7 @@
 
 (macro_call
   macro: (identifier) @keyword
-  (#match? @keyword "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer)$"))
+  (#match? @keyword "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external)$"))
 
 (macro_call
   macro: (identifier) @keyword.conditional
@@ -135,7 +135,6 @@
 (at_attributes
   ["@"] @attribute
   (identifier) @attribute)
-
 (at_attributes
   ["@"] @attribute
   (macro_call
@@ -143,7 +142,6 @@
 
 (attributes
   (identifier) @attribute)
-
 (attributes
   (macro_call
     macro: (identifier) @attribute))
