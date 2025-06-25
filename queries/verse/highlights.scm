@@ -8,7 +8,7 @@
 (integer) @number
 (float) @number
 (logic_literal) @keyword
-(path_literal) @module
+(path_literal) @namespace
 
 (identifier) @variable
 ((identifier) @variable.builtin
@@ -24,7 +24,23 @@
     function: (identifier) @keyword)
   (of_expression
     lhs: (identifier) @keyword)
-] (#match? @keyword "^(import)$"))
+] (#match? @keyword "^(import|generator|subtype|castable_subtype)$"))
+
+([
+  (function_call
+    function: (identifier) @_
+    (_) @namespace)
+  (of_expression
+    lhs: (identifier) @_
+    rhs: (_) @namespace)
+] (#match? @_ "^(import)$"))
+
+
+(macro_call
+  macro: (identifier) @_
+  (block
+    (_) @namespace)
+  (#match? @_ "^(using)$"))
 
 (field_expression
   field: (identifier) @variable.member)
@@ -86,6 +102,12 @@
   (block
     (declaration
       lhs: (identifier) @variable.member)))
+(macro_call
+  macro: (identifier)
+  (block
+    (comma_separated_group
+      (declaration
+        lhs: (identifier) @variable.member))))
 
 ; Builtin macros
 ([
@@ -179,6 +201,8 @@
   ":"
   "macro:"
   ":="
+  "->"
+  ".."
   "=>"
 ] @operator
 
@@ -194,6 +218,8 @@
   "or"
   "not"
   "of"
+  "to"
+  "where"
 ] @keyword.operator
 
 (attributes
