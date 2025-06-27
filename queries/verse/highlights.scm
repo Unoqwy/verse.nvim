@@ -21,14 +21,23 @@
 
 ([
   (function_call
-    function: (identifier) @keyword)
+    function: (identifier) @keyword.import)
   (of_expression
-    lhs: (identifier) @keyword)
-] (#match? @keyword "^(import|generator|subtype|castable_subtype)$"))
+    lhs: (identifier) @keyword.import)
+] (#match? @keyword.import "^(import)$"))
+([
+  (function_call
+    function: (identifier) @function.builtin)
+  (of_expression
+    lhs: (identifier) @function.builtin)
+] (#match? @function.builtin "^(generator|subtype|castable_subtype)$"))
 
 ; Namespaces usage
 (qualifier
   (identifier) @namespace)
+(qualifier
+  (identifier) @namespace.builtin
+  (#match? @namespace.builtin "^(super|local)$"))
 
 ([
   (function_call
@@ -119,6 +128,7 @@
       (declaration
         lhs: (identifier) @property)))
 ] (#not-match? @type "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external|for|loop|while|do|if|else|case|then)$"))
+
 (macro_call
   macro: (identifier)
   (block
@@ -148,8 +158,17 @@
   (#match? @_ "^(module)$"))
 
 (macro_call
-  macro: (identifier) @keyword
-  (#match? @keyword "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external)$"))
+  macro: (identifier) @keyword.import
+  (#match? @keyword.import "^(using)$"))
+(macro_call
+  macro: (identifier) @keyword.macro
+  (#match? @keyword.macro "^(profile|spawn|sync|race|rush|branch|defer|external)$"))
+(macro_call
+  macro: (identifier) @keyword.macro.type
+  (#match? @keyword.macro.type "^(map|array|logic|type)$"))
+(macro_call
+  macro: (identifier) @keyword.type
+  (#match? @keyword.type "^(module|struct|class|enum|interface)$"))
 
 (macro_call
   macro: (identifier) @keyword.conditional
@@ -224,6 +243,11 @@
   "to"
   "where"
 ] @keyword.operator
+
+(unary_expression
+  (_)
+  .
+  "?" @keyword.operator)
 
 ; Attributes
 (at_attributes
