@@ -7,7 +7,7 @@
 (char) @string
 (integer) @number
 (float) @number
-(logic_literal) @keyword
+(logic_literal) @boolean
 (path_literal) @namespace
 
 (identifier) @variable
@@ -26,6 +26,10 @@
     lhs: (identifier) @keyword)
 ] (#match? @keyword "^(import|generator|subtype|castable_subtype)$"))
 
+; Namespaces usage
+(qualifier
+  (identifier) @namespace)
+
 ([
   (function_call
     function: (identifier) @_
@@ -35,19 +39,23 @@
     rhs: (_) @namespace)
 ] (#match? @_ "^(import)$"))
 
-
 (macro_call
   macro: (identifier) @_
   (block
     (_) @namespace)
-  (#match? @_ "^(using)$"))
+  (#match? @_ "^(using|scoped)$"))
 
+(macro_call
+  macro: (identifier) @function.macro)
+
+; Field access
 (field_expression
   field: (identifier) @variable.member)
 (function_call
   function: (field_expression
     field: (identifier) @function))
 
+; Declarations
 (declaration
   lhs: "("*
   lhs: (identifier) @constant)
@@ -92,16 +100,25 @@
     type_hint: (identifier) @type.builtin)
 ] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|any)$"))
 
-; Archetype
+; for (e:iterator)
 (macro_call
-  macro: (identifier) @type
-  (block
-    (declaration)*))
-(macro_call
-  macro: (identifier)
-  (block
+  macro: (identifier) @_
+  arguments: (argument_list
     (declaration
-      lhs: (identifier) @variable.member)))
+      type_hint: (identifier) @variable))
+  (#match? @_ "^(for)$"))
+
+; Archetype
+([
+  (macro_call
+    macro: (identifier) @type
+    (block))
+  (macro_call
+    macro: (identifier) @type
+    (block
+      (declaration
+        lhs: (identifier) @property)))
+] (#not-match? @type "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external|for|loop|while|do|if|else|case|then)$"))
 (macro_call
   macro: (identifier)
   (block
@@ -131,9 +148,6 @@
   (#match? @_ "^(module)$"))
 
 (macro_call
-  macro: (identifier) @function.macro)
-
-(macro_call
   macro: (identifier) @keyword
   (#match? @keyword "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external)$"))
 
@@ -152,21 +166,10 @@
 (function_declaration
   (declaration
     lhs: (identifier) @variable.parameter))
-
-; Attributes
-(at_attributes
-  ["@"] @attribute
-  (identifier) @attribute)
-(at_attributes
-  ["@"] @attribute
-  (macro_call
-    macro: (identifier) @attribute))
-
-(attributes
-  (identifier) @attribute)
-(attributes
-  (macro_call
-    macro: (identifier) @attribute))
+(function_declaration
+  (unary_expression
+    (declaration
+      lhs: (identifier) @variable.parameter)))
 
 ; Tokens
 [
@@ -222,6 +225,36 @@
   "where"
 ] @keyword.operator
 
+; Attributes
+(at_attributes
+  ["@"] @annotation.delimiter
+  (identifier) @annotation)
+(at_attributes
+  ["@"] @annotation.delimiter
+  (macro_call
+    macro: (identifier) @annotation))
+
 (attributes
-  ["<" ">"] @attribute)
+  (identifier) @attribute)
+(attributes
+  (macro_call
+    macro: (identifier) @attribute))
+(attributes
+  ["<" ">"] @attribute.delimiter)
+
+([
+  (attributes
+    "<" @attribute.visibility.delimiter
+    .
+    (identifier) @attribute.visibility @_
+    .
+    ">" @attribute.visibility.delimiter)
+  (attributes
+    "<" @attribute.visibility.delimiter
+    .
+    (macro_call
+      macro: (identifier) @attribute.visibility @_)
+    .
+    ">" @attribute.visibility.delimiter)
+] (#match? @_ "^(internal|public|private|protected|scoped)$"))
 
