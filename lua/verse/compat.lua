@@ -42,10 +42,19 @@ function M.inject_outgoing_wsl_path_transformer(client)
     return
   end
   client["verse_wsl_exe_compat_injected"] = true
+
   local orig_fn_notify = client.notify
-  client.notify = function(self, method, params)
+  client.notify = function(...)
+    local _, _, params = ...
     M._uri_transform_lsp_params(params)
-    return orig_fn_notify(self, method, params)
+    return orig_fn_notify(...)
+  end
+
+  local orig_fn_request = client.request
+  client.request = function(...)
+    local _, _, params = ...
+    M._uri_transform_lsp_params(params)
+    return orig_fn_request(...)
   end
 end
 
