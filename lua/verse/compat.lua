@@ -6,17 +6,39 @@ local M = {}
 --- @return boolean
 function M.using_wsl()
   return os.getenv("WSL_DISTRO_NAME") ~= nil
+    -- sometimes WSL is not initialized properly and won't have env variables/Windows PATH
+    or vim.uv.os_uname().release:match("-Microsoft$")
 end
 
 --- Gets the Windows User Directory from within WSL.
 --- @return string? Directory path
 function M.get_wsl_windows_user_directory()
-  local cmd_result = vim.system({"cmd.exe", "/c", "echo", "%USERNAME%"}):wait()
-  if cmd_result.code ~= 0 then
-    return nil
+  local cmd_exe_bin = nil
+  if os.getenv("WSL_DISTRO_NAME") ~= nil then -- if present WSL is initialized properly
+    cmd_exe_bin = "cmd.exe"
+  elseif vim.uv.fs_stat("/mnt/c/WINDOWS/system32/cmd.exe") then
+    cmd_exe_bin = "/mnt/c/WINDOWS/system32/cmd.exe"
   end
-  local win_username = vim.fn.trim(cmd_result.stdout)
-  return vim.fs.joinpath("/mnt", "c", "Users", win_username)
+
+  local win_username = nil
+  if cmd_exe_bin ~= nil then
+    local cmd_result = vim.system({cmd_exe_bin, "/c", "echo", "%USERNAME%"}):wait()
+    if cmd_result.code ~= 0 then
+      return nil
+    end
+    win_username = vim.fn.trim(cmd_result.stdout)
+  else
+    local wsl_username = vim.env.getenv("USER")
+    if wsl_username ~= nil then
+      win_username = wsl_username
+    end
+  end
+
+  local user_dir = vim.fs.joinpath("/mnt", "c", "Users", win_username)
+  if vim.uv.fs_stat(user_dir) then
+    return user_dir
+  end
+  return nil
 end
 
 --- Injects a path transformer into vim.uri_to_fname to remap X:\ paths to /mnt/x.
