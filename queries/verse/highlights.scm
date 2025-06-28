@@ -4,6 +4,7 @@
 (string
   ["\"" "\""] @string)
 (string_fragment) @string
+(escape_sequence) @string.escape
 (char) @string
 (integer) @number
 (float) @number
