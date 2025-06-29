@@ -7,10 +7,9 @@
 - [x] Tree-sitter syntax highlighting ([tree-sitter-verse](https://github.com/Unoqwy/tree-sitter-verse))
 - [x] Use the LSP server from the official VSCode extension (finds it locally)
 - [x] Find and load .vproject from anywhere in a UEFN project
-- [ ] Verse Workflow Server support
+- [x] Verse Workflow Server support
   * [x] Commands
-  * [ ] Progress reporting
-  * [ ] Build state
+  * [x] Build/Push progress
 - [x] WSL support
 
 ## Installation
@@ -21,7 +20,10 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 -- plugins/verse.lua
 return {
   "Unoqwy/verse.nvim",
-  dependencies = { "nvim-treesitter/nvim-treesitter" },
+  dependencies = {
+    "nvim-treesitter/nvim-treesitter",
+    -- "j-hui/fidget.nvim", -- Uncomment to get Build/Push spinning progress
+  },
   build = ":TSUpdate verse",
   opts = {},
 }
@@ -47,7 +49,7 @@ require("verse").setup()
 -- list digest files which are usually not located alongside user code 
 require("verse.project").list_digest_files()
 
--- variant to the above function that returns a `fd` command line to list digest files
+-- variant to the above function that returns a `fd` (or `fdfind`) command line to list digest files
 require("verse.project").list_digest_files_cmd()
 ```
 
@@ -65,4 +67,9 @@ vim.keymap.set("n", "<leader>od", function()
   })
 end)
 ```
+
+## fidget.nvim integration
+
+If present, this plugin will use [fidget.nvim](https://github.com/j-hui/fidget.nvim) to display Build/Push progress.  
+The integration is loaded only once the workflow server connects for the first time.
 

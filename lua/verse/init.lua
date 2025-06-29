@@ -12,6 +12,10 @@ local M = {}
 --- @field macos_auto_delete_annoying_files? boolean
 --- Verse Workflow Server related options.
 --- @field workflow_server? verse.WorkflowServerConfig
+--- Enable debug mode used for this plugin's development.
+--- @field debug? boolean
+--- Integrations related options.
+--- @field integrations? verse.IntegrationsConfig
 
 --- @class verse.WorkflowServerConfig
 ---
@@ -23,6 +27,11 @@ local M = {}
 --- an action that requires an active connection.
 --- @field auto_connect? boolean
 
+--- @class verse.IntegrationsConfig
+---
+--- Whether to use fidget.nvim to display spinning progress from the Workflow Server.
+--- @field fidget_nvim? boolean
+
 --- @type verse.Config
 local config_defaults = {
   vproject_workspace_folders_only = true,
@@ -31,6 +40,10 @@ local config_defaults = {
     default_address = "127.0.0.1",
     default_port = 1962,
     auto_connect = true,
+  },
+  debug = false,
+  integrations = {
+    fidget_nvim = true
   }
 }
 
@@ -38,6 +51,11 @@ local config_defaults = {
 --- @return verse.Config
 function M.get_config()
   return M._config or config_defaults
+end
+
+--- @return boolean
+function M.debug_enabled()
+  return M._config.debug or false
 end
 
 --- @param config? verse.Config
@@ -116,6 +134,31 @@ function M.register_commands()
       return { "all", "verse" }
     end,
   })
+end
+
+local integration_done = false
+
+function M._init_workflow_integration()
+  if integration_done then
+    return
+  end
+  integration_done = true
+
+  -- checking fidget.progress to exclude legacy branch
+  local fidget_nvim_present, _ = pcall(require, "fidget.progress")
+  if fidget_nvim_present then
+    require("verse.integration.fidget_nvim").init()
+  end
+end
+
+--- @param title string
+--- @return fun(msg:string, level?:integer)
+function M.create_notifier(title)
+  return function(msg, level)
+    vim.notify(msg, level, {
+      title = title,
+    })
+  end
 end
 
 return M
