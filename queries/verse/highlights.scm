@@ -1,4 +1,6 @@
-(comment) @comment @spell
+(line_comment) @comment @spell
+(block_comment) @comment @spell
+(indent_comment) @comment @spell
 
 ; Literals
 (string
