@@ -144,10 +144,13 @@ function M._init_workflow_integration()
   end
   integration_done = true
 
-  -- checking fidget.progress to exclude legacy branch
-  local fidget_nvim_present, _ = pcall(require, "fidget.progress")
-  if fidget_nvim_present then
-    require("verse.integration.fidget_nvim").init()
+  local config = M.get_config()
+  if config.integrations.fidget_nvim then
+    -- checking fidget.progress to exclude legacy branch
+    local fidget_nvim_present, _ = pcall(require, "fidget.progress")
+    if fidget_nvim_present then
+      require("verse.integration.fidget_nvim").init()
+    end
   end
 end
 
