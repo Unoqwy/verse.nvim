@@ -73,3 +73,7 @@ end)
 If present, this plugin will use [fidget.nvim](https://github.com/j-hui/fidget.nvim) to display Build/Push progress.  
 The integration is loaded only once the workflow server connects for the first time.
 
+## WSL Additional Information
+
+Make sure WSL uses [Mirrored mode networking](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking) for the plugin to connect to the Workflow Server running on the Windows host properly.
+
