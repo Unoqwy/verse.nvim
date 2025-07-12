@@ -47,7 +47,7 @@ local config_defaults = {
   }
 }
 
---- Gets the current plugin config.
+--- Returns the current plugin config.
 --- @return verse.Config
 function M.get_config()
   return M._config or config_defaults
@@ -82,7 +82,7 @@ function M.setup(config)
     }
   end
 
-  M.register_commands()
+  M._register_commands()
 
   if vim.uv.os_uname().sysname == "Darwin" and config.macos_auto_delete_annoying_files then
     vim.api.nvim_create_autocmd("BufWritePost", {
@@ -96,7 +96,7 @@ function M.setup(config)
   end
 end
 
-function M.register_commands()
+function M._register_commands()
   vim.api.nvim_create_user_command("VerseConnect", function()
     require("verse.workflow_server").connect()
   end, {

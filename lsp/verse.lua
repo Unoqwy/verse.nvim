@@ -36,7 +36,7 @@ return {
   end,
   reuse_client = function(client, config)
     local root_dir = config.root_dir or vim.fn.expand("%:p:h")
-    local vproject_file = vproject.find_vproject_file(root_dir)
+    local vproject_file = vproject.find_vproject_file_from_root_dir(root_dir)
     return vproject_file ~= nil and client.config["vproject_file"] == vproject_file
   end,
   before_init = function(params, config)
@@ -73,6 +73,9 @@ return {
     if client.config["verse_wsl_exe_compat"] then
       require("verse.compat").inject_outgoing_wsl_path_transformer(client)
     end
+  end,
+  on_attach = function(client, bufnr)
+    vim.b[bufnr].vproject_file = client.config["vproject_file"]
   end,
 }
 

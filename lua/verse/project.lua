@@ -48,10 +48,28 @@ local function find_in_dir(dir, pat)
   return result
 end
 
---- Finds the .vproject file relevant to the given file.
+--- Finds the .vproject file relevant to the given source file.
+--- @param source_file? string Source file path. Defaults to current file
+--- @return string?
+function M.find_vproject_file(source_file)
+  local source_dir
+  if source_file ~= nil then
+    source_dir = vim.fs.dirname(vim.fs.abspath(source_file))
+  else
+    source_dir = vim.fn.expand("%:p:h")
+  end
+  local root_dir = require("verse.project").find_root_dir(source_dir)
+  if root_dir ~= nil then
+    local result, _ = require("verse.project").find_vproject_file_from_root_dir(root_dir)
+    return result
+  end
+  return nil
+end
+
+--- Finds the .vproject file relevant to the given root directory.
 --- @param root_dir string Root direcotry path
 --- @return string? vproject_file, string? project_name
-function M.find_vproject_file(root_dir)
+function M.find_vproject_file_from_root_dir(root_dir)
   root_dir = vim.fs.normalize(root_dir)
 
   -- look for .vproject file directly
@@ -127,7 +145,7 @@ end
 --- @param opts? verse.project.GetWorkspaceFoldersOpts
 --- @return lsp.WorkspaceFolder[] workspace_folders, string? vproject_file
 function M.get_workspace_folders_from_root_dir(root_dir, opts)
-  local vproject_file, project_name = M.find_vproject_file(root_dir)
+  local vproject_file, project_name = M.find_vproject_file_from_root_dir(root_dir)
   if vproject_file ~= nil then
     return M.get_workspace_folders_from_vproject_file(vproject_file, opts), vproject_file
   end
