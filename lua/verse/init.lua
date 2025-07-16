@@ -134,6 +134,13 @@ function M._register_commands()
       return { "all", "verse" }
     end,
   })
+
+  vim.api.nvim_create_user_command("FixVerse", function()
+    M._temp_fix_verse()
+  end, {
+    nargs = 0,
+    desc = "Temporary command to fix 'external{} macro expected here' bug without building Verse code",
+  })
 end
 
 local integration_done = false
@@ -161,6 +168,74 @@ function M.create_notifier(title)
     vim.notify(msg, level, {
       title = title,
     })
+  end
+end
+
+function M._temp_fix_verse()
+  local vproject_file = require("verse.project").find_vproject_file()
+  if vproject_file == nil then
+    vim.notify("Couldn't find the .vproject file to apply workaround fix to",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+    return
+  end
+  local file_contents = table.concat(vim.fn.readfile(vproject_file), "\n")
+  local ok, json = pcall(vim.json.decode, file_contents)
+  if not ok then
+    vim.notify("Couldn't parse .vproject file",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+    return
+  end
+
+  local applied_fix = false
+  local packages = json["packages"]
+  if packages ~= nil then
+    for _, package in ipairs(packages) do
+      local desc = package["desc"]
+      if desc ~= nil then
+        local dir_path = desc["dirPath"]
+        if dir_path:match("Content$") then
+          local settings = desc["settings"]
+          if settings ~= nil then
+            settings["role"] = "Source"
+            applied_fix = true
+          end
+        end
+      end
+    end
+  end
+
+  if not applied_fix then
+    vim.notify("No fix applied. Unexpected .vproject format",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+  end
+
+  local new_file_contents = vim.json.encode(json)
+  local fd = vim.uv.fs_open(vproject_file, "w", tonumber("644", 8))
+  if fd ~= nil then
+    vim.uv.fs_write(fd, new_file_contents, -1)
+    vim.uv.fs_close(fd)
+    print("Verse fix applied. LSP server will restart")
+
+    local verse_lsp_clients = vim.lsp.get_clients({
+      bufnr = nil,
+      name = "verse",
+    })
+    for _, client in ipairs(verse_lsp_clients) do
+      client:stop(true)
+    end
+    vim.lsp.enable("verse", false)
+
+    local timer = assert(vim.uv.new_timer())
+    timer:start(500, 0, function()
+      timer:stop()
+      timer:close()
+      vim.schedule(function()
+        vim.lsp.enable("verse", true)
+      end)
+    end)
+  else
+    vim.notify("Couldn't write fix to " .. vproject_file,
+      vim.log.levels.WARN, { title = "verse.nvim" })
   end
 end
 

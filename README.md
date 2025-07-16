@@ -43,6 +43,11 @@ require("verse").setup()
 - `:VersePush` - Push Verse Changes
 - `:VersePush all` - Push Changes
 
+### Temporary Workaround
+
+- `:FixVerse` - Fix `external{} macro expected here` bug without needing to Build Verse.  
+                This command will be removed once the the error stops happening.
+
 ### Useful functions
 
 ```lua
