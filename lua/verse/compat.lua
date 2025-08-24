@@ -67,15 +67,17 @@ function M.inject_outgoing_wsl_path_transformer(client)
 
   local orig_fn_notify = client.notify
   client.notify = function(...)
-    local _, _, params = ...
-    M._uri_transform_lsp_params(params)
+    for _, params in ipairs({ ... }) do
+      M._uri_transform_lsp_params(params)
+    end
     return orig_fn_notify(...)
   end
 
   local orig_fn_request = client.request
   client.request = function(...)
-    local _, _, params = ...
-    M._uri_transform_lsp_params(params)
+    for _, params in ipairs({ ... }) do
+      M._uri_transform_lsp_params(params)
+    end
     return orig_fn_request(...)
   end
 end
