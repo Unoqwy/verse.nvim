@@ -18,9 +18,9 @@
   (#match? @variable.builtin "^(Self)$"))
 
 (function_call
-  function: (identifier) @function)
+  function: (identifier) @function.call)
 (of_expression
-  lhs: (identifier) @function)
+  lhs: (identifier) @function.call)
 
 ([
   (function_call
@@ -33,7 +33,7 @@
     function: (identifier) @function.builtin)
   (of_expression
     lhs: (identifier) @function.builtin)
-] (#match? @function.builtin "^(generator|subtype|castable_subtype)$"))
+] (#match? @function.builtin "^(generator|subtype|castable_subtype|tuple)$"))
 
 ; Namespaces usage
 (qualifier
@@ -65,7 +65,7 @@
   field: (identifier) @variable.member)
 (function_call
   function: (field_expression
-    field: (identifier) @function))
+    field: (identifier) @function.call))
 
 ; Declarations
 (declaration
@@ -110,7 +110,7 @@
     ret_type: (identifier) @type.builtin)
   (declaration
     type_hint: (identifier) @type.builtin)
-] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|any)$"))
+] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|option|any)$"))
 
 ; for (e:iterator)
 (macro_call
@@ -130,7 +130,7 @@
     (block
       (declaration
         lhs: (identifier) @property)))
-] (#not-match? @type "^(module|struct|class|enum|interface|profile|using|map|array|logic|spawn|sync|race|rush|branch|defer|type|external|for|loop|while|do|if|else|case|then)$"))
+] (#not-match? @type "^(module|struct|class|enum|interface|profile|using|map|array|logic|option|spawn|sync|race|rush|branch|defer|type|external|for|loop|while|do|if|else|case|then|block)$"))
 
 (macro_call
   macro: (identifier)
@@ -184,7 +184,7 @@
 
 ; Function declaration
 (function_declaration
-  name: (_) @function)
+  name: (_) @function.definition)
 (function_declaration
   (declaration
     lhs: (identifier) @variable.parameter))
@@ -192,6 +192,10 @@
   (unary_expression
     (declaration
       lhs: (identifier) @variable.parameter)))
+
+(function_declaration
+  name: (identifier) @constructor.builtin
+  (#match? @constructor.builtin "^_+$"))
 
 ; Tokens
 [
