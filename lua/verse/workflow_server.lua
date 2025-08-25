@@ -6,6 +6,8 @@ local debug_enabled = verse.debug_enabled
 local notify = verse.create_notifier("Verse Workflow")
 local log_level = vim.log.levels
 
+local SERVER_STATE_PROPAGATION_LEEWAY_MS = 1000
+
 --- The state of the workflow server.
 --- @class verse.workflow_server.State
 ---
@@ -21,6 +23,7 @@ local log_level = vim.log.levels
 
 --- @class verse.workflow_server.State.Building
 ---
+--- @field was_notified boolean
 --- @field done boolean
 --- @field error? string
 --- @field result? verse.workflow_server.State.Building.Result
@@ -142,22 +145,32 @@ function M._send_request(req)
   end
 end
 
+--- @class verse.workflow_server.BuildOpts
+--- @field callback? fun(built:boolean) Callback when building completes
+--- @field no_request_print? boolean
+
 --- Requests the server to build verse.
-function M.build()
+--- @param opts? verse.workflow_server.BuildOpts
+function M.build(opts)
   if state.building and not state.building.done then
     notify("Already building Verse code")
     return
   end
 
+  opts = opts or {}
+
   M._send_request({
     cmd = "compileProject",
     on_send = function()
       state.building = {
+        was_notified = false,
         done = false,
       }
       emit_state_update()
 
-      notify("Verse code build requested")
+      if opts.no_request_print ~= true then
+        notify("Verse code build requested")
+      end
     end,
     on_response = function(err, result)
       state.building.done = true
@@ -185,6 +198,11 @@ function M.build()
       else
         notify("Verse code built successfully")
       end
+
+      if opts.callback ~= nil then
+        local built = result ~= nil and result.num_errors == 0
+        opts.callback(built)
+      end
     end,
   })
 end
@@ -193,6 +211,7 @@ end
 ---
 --- Whether to only push Verse changes. If false, pushes all changes.
 --- @field verse_only? boolean
+--- @field skip_prebuild? boolean
 
 --- Requests the server to push changes
 --- @param opts? verse.workflow_server.PushChangesOpts
@@ -214,6 +233,36 @@ function M.push_changes(opts)
   else
     action_name = "Push Changes"
   end
+
+  if not state.can_push_verse_changes then
+    if not opts.skip_prebuild then
+      local callback = function(built)
+        if built then
+          local timer = vim.uv.new_timer()
+          if timer == nil then
+            return
+          end
+          timer:start(SERVER_STATE_PROPAGATION_LEEWAY_MS, 0, function()
+            timer:stop()
+            timer:close()
+            M.push_changes(vim.tbl_extend("force", opts, { skip_prebuild = true }))
+          end)
+        end
+      end
+
+      notify("Requesting Verse Build before " .. action_name)
+      M.build({
+        callback = callback,
+        no_request_print = true,
+      })
+    else
+      -- TODO : This requirement can be removed once the workflow server gets fixed and it
+      --        starts consistently sending a response to pushChanges requests again.
+      notify("Cannot " .. action_name .. " according to server", log_level.WARN)
+    end
+    return
+  end
+
   M._send_request({
     cmd = "pushChanges",
     params = verse_only,
@@ -251,12 +300,25 @@ end
 function M._handle_notification(command, params)
   if command == "updateBuildState" and type(params) == "number" then
     state.build_state = params
-    if state.pushing_changes ~= nil and state.build_state == proto.BuildState.Building then
-      state.pushing_changes.ending_game = false
+    if state.build_state == proto.BuildState.Building then
+      if state.building ~= nil and not state.building.was_notified then
+        state.building.was_notified = true
+      end
+      if state.pushing_changes ~= nil then
+        state.pushing_changes.ending_game = false
+      end
     end
     emit_state_update()
   elseif command == "canPushVerseChanges" and type(params) == "boolean" then
     state.can_push_verse_changes = params
+    if not state.can_push_verse_changes
+      and state.pushing_changes ~= nil
+      and M._client:get_connection_duration() > SERVER_STATE_PROPAGATION_LEEWAY_MS then
+      -- because of a bug where the server doesn't send a response to the push request
+      state.pushing_changes.ending_game = false
+      state.pushing_changes.done = true
+      state.pushing_changes = nil
+    end
     emit_state_update()
   elseif debug_enabled() then
     notify("Unhandled Verse Workflow Server notification: " .. command .. "(" .. vim.inspect(params) .. ")", log_level.DEBUG)

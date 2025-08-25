@@ -7,9 +7,10 @@ local log_level = vim.log.levels
 
 ---@class verse.workflow_server.Client
 ---@field state verse.workflow_server.Client.ConnectionState
----@field socket uv.uv_tcp_t
----@field seq integer
----@field pending_reqs table<integer, fun(err:any, result:any)>
+---@field private socket uv.uv_tcp_t
+---@field private connect_timestamp integer|nil
+---@field private seq integer
+---@field private pending_reqs table<integer, fun(err:any, result:any)>
 ---@field opts verse.workflow_server.ClientOpts
 local Client = {}
 Client.__index = Client
@@ -46,19 +47,8 @@ function Client.connect_new(address, port, opts)
 
   self.state = Client.ConnectionState.Connecting
   socket:connect(address, port, function(err)
-    if err == nil then
-      self.state = Client.ConnectionState.Connected
-
-      socket:read_start(function(...)
-        self:_recv(...)
-      end)
-
-      if self.opts.on_connect ~= nil then
-        vim.schedule(self.opts.on_connect)
-      end
-    else
-      self.state = Client.ConnectionState.Failed
-
+    self:_handle_connect()
+    if err ~= nil then
       vim.schedule(function()
         notify("Connection to Verse Workflow Server at " .. address .. ":" .. port .. " failed: " .. err, log_level.WARN)
       end)
@@ -68,21 +58,51 @@ function Client.connect_new(address, port, opts)
   return self
 end
 
+--- @param err string|nil
+function Client:_handle_connect(err)
+  if err == nil then
+    self.state = Client.ConnectionState.Connected
+    self.connect_timestamp = vim.uv.now()
+
+    self.socket:read_start(function(...)
+      self:_recv(...)
+    end)
+
+    if self.opts.on_connect ~= nil then
+      vim.schedule(self.opts.on_connect)
+    end
+  else
+    self.state = Client.ConnectionState.Failed
+  end
+end
+
 --- @return boolean # Whether the client is alive
 function Client:is_alive()
   return self.state == Client.ConnectionState.Connected or
     self.state == Client.ConnectionState.Connecting
 end
 
+--- Shut downs the client socket connection.
 function Client:shutdown()
   if self:is_alive() then
     self.socket:read_stop()
     self.socket:shutdown(function()
       self.state = Client.ConnectionState.Disconnected
+      self.connect_timestamp = nil
       if self.opts.on_disconnect ~= nil then
         vim.schedule(self.opts.on_disconnect)
       end
     end)
+  end
+end
+
+--- Returns how long the client has been successfully connected to the server.
+--- @return integer # Duration in millis or -1 if not connected
+function Client:get_connection_duration()
+  if self.connect_timestamp ~= nil and self.connect_timestamp > 0 then
+    return vim.uv.now() - self.connect_timestamp
+  else
+    return -1
   end
 end
 

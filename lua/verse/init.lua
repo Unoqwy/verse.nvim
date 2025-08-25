@@ -207,6 +207,7 @@ function M._temp_fix_verse()
   if not applied_fix then
     vim.notify("No fix applied. Unexpected .vproject format",
       vim.log.levels.WARN, { title = "verse.nvim" })
+    return
   end
 
   local new_file_contents = vim.json.encode(json)

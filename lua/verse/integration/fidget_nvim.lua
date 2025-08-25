@@ -8,21 +8,36 @@ local build_handle
 
 local function process_building()
   local state  = verse_ws.get_state()
-  local building = state.building
-  if building == nil or building.done then
-    if build_handle ~= nil then
-      build_handle:report({
-        message = "Done"
-      })
-      build_handle:finish()
-      build_handle = nil
+  local building = (state.building ~= nil and not state.building.was_notified)
+    or state.build_state == proto.BuildState.Building
+  if building then
+    local message
+    if state.build_state == proto.BuildState.Building then
+      message = "Building..."
+    else
+      message = "Requesting..."
     end
-  elseif build_handle == nil then
-    build_handle = require("fidget.progress.handle").create({
-      title = "Build Verse",
-      message = "Building...",
-      lsp_client = { name = "Verse Workflow" },
+    if build_handle == nil then
+      build_handle = require("fidget.progress.handle").create({
+        title = "Build Verse",
+        message = message,
+        lsp_client = { name = "Verse Workflow" },
+      })
+    else
+      build_handle:report({
+        message = message
+      })
+    end
+  elseif build_handle ~= nil then
+    local messages = {
+      [proto.BuildState.Errors] = "Failed",
+      [proto.BuildState.NoBuild] = "Cancelled"
+    }
+    build_handle:report({
+      message = messages[state.build_state] or "Done"
     })
+    build_handle:finish()
+    build_handle = nil
   end
 end
 --- }}}
