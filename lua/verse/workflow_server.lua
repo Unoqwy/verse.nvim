@@ -6,7 +6,7 @@ local debug_enabled = verse.debug_enabled
 local notify = verse.create_notifier("Verse Workflow")
 local log_level = vim.log.levels
 
-local SERVER_STATE_PROPAGATION_LEEWAY_MS = 1000
+local SERVER_STATE_PROPAGATION_LEEWAY_MS = 1500
 
 --- The state of the workflow server.
 --- @class verse.workflow_server.State
