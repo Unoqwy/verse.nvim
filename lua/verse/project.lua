@@ -58,7 +58,7 @@ function M.find_vproject_file(source_file)
   else
     source_dir = vim.fn.expand("%:p:h")
   end
-  local root_dir = require("verse.project").find_root_dir(source_dir)
+  local root_dir = require("verse.project").find_root_dir(source_dir) or source_dir
   if root_dir ~= nil then
     local result, _ = require("verse.project").find_vproject_file_from_root_dir(root_dir)
     return result
