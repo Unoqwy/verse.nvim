@@ -1,3 +1,5 @@
+-- The official Verse LSP server, bundled with UEFN.
+
 local vproject = require("verse.project")
 
 local function default_cmd()
@@ -37,7 +39,8 @@ return {
   reuse_client = function(client, config)
     local root_dir = config.root_dir or vim.fn.expand("%:p:h")
     local vproject_file = vproject.find_vproject_file_from_root_dir(root_dir)
-    return vproject_file ~= nil and client.config["vproject_file"] == vproject_file
+    return client.name == "verse"
+      and vproject_file ~= nil and client.config["vproject_file"] == vproject_file
   end,
   before_init = function(params, config)
     local lsp_bin = type(config.cmd) == "table" and config.cmd[1] or nil
@@ -78,4 +81,3 @@ return {
     vim.b[bufnr].vproject_file = client.config["vproject_file"]
   end,
 }
-

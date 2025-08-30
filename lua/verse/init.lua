@@ -70,6 +70,7 @@ function M.setup(config)
   end
 
   vim.lsp.enable("verse")
+  vim.lsp.enable("vex_ls")
 
   local ok, ts_parsers = pcall(require, "nvim-treesitter.parsers")
   if ok then

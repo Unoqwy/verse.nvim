@@ -5,7 +5,13 @@
 ## Features
 
 - [x] Tree-sitter syntax highlighting ([tree-sitter-verse](https://github.com/Unoqwy/tree-sitter-verse))
-- [x] Use the LSP server from the official VSCode extension (finds it locally)
+- [x] Use the official LSP server bundled with UEFN (extracts it from local files)
+- [ ] Complement the default LSP server with ([vex_ls](https://github.com/Unoqwy/vex/tree/master/tools/vex_ls)
+  <br/>**WORK IN PROGRESS** to achieve:
+  * Semantic highlighting
+  * Fast completions
+  * Code formatting
+  * Broader coverage of LSP features
 - [x] Find and load .vproject from anywhere in a UEFN project
 - [x] Verse Workflow Server support
   * [x] Commands
