@@ -21,15 +21,15 @@ local function get_matching_dirs(base, match)
 end
 
 --- Finds the most recent installed version of epicgames.verse VSCode extension.
---- @param home_dir string? Use specific user home directory
+--- @param home_dirs string[] Home directories to look from
 --- @return string? # Extension directory path
-function M._find_installed_extension(home_dir)
-  local home = home_dir or vim.fn.expand("$HOME")
-  local ext_parent_dirs = {
-    vim.fs.joinpath(home, ".vscode", "extensions"),
-    vim.fs.joinpath(home, ".cursor", "extensions"),
-    vim.fs.joinpath(home, ".windsurf", "extensions"),
-  }
+function M._find_installed_extension(home_dirs)
+  local ext_parent_dirs = {}
+  for _, home in ipairs(home_dirs) do
+    table.insert(ext_parent_dirs, vim.fs.joinpath(home, ".vscode", "extensions"))
+    table.insert(ext_parent_dirs, vim.fs.joinpath(home, ".cursor", "extensions"))
+    table.insert(ext_parent_dirs, vim.fs.joinpath(home, ".windsurf", "extensions"))
+  end
 
   local all_matching_dirs = {}
   for _, path in ipairs(ext_parent_dirs) do
@@ -55,13 +55,17 @@ end
 function M.find_lsp_binary()
   local using_wsl = require("verse.compat").using_wsl()
 
-  local latest_ext_dir = M._find_installed_extension()
-  if using_wsl and latest_ext_dir == nil then
+  local home_dirs = {
+    vim.fn.expand("$HOME"),
+  }
+  if using_wsl then
     local win_user_dir = require("verse.compat").get_wsl_windows_user_directory()
     if win_user_dir ~= nil then
-      latest_ext_dir = M._find_installed_extension(win_user_dir)
+      table.insert(home_dirs, win_user_dir)
     end
   end
+
+  local latest_ext_dir = M._find_installed_extension(home_dirs)
   if latest_ext_dir == nil then
     return nil
   end
