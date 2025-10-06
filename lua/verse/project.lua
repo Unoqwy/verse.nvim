@@ -6,7 +6,7 @@ local function file_match(pat)
   end
 end
 
---- Finds the root directory for a Verse project.
+--- Finds the root directory for a Verse project from within the project tree.
 --- @return string?
 function M.find_root_dir(fname)
   return vim.fs.root(fname, file_match(".vproject$")) or
@@ -343,6 +343,43 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   return result
 end
 
+--- Finds a directory who has a parent directory with a given name
+--- @return string? Directory path
+local function find_dir_parented_by(target_parent, start_path)
+  local dirname = start_path or vim.fn.expand("%:p:h")
+
+  while dirname and dirname ~= "/" do
+    local parent = vim.fn.fnamemodify(dirname, ":h")
+    if vim.fn.fnamemodify(parent, ":t") == target_parent then
+      return dirname
+    end
+    dirname = parent
+  end
+
+  return nil
+end
+
+--- Finds workspace folders, walking back from a digest file external to the project tree.
+--- @return lsp.WorkspaceFolder[] Workspace folders, empty if not found
+local function get_workspace_folders_from_digest_file(fname)
+  local external_project_dir = find_dir_parented_by("VerseProject", fname)
+  if external_project_dir == nil then
+    return {}
+  end
+
+  local project_name = vim.fn.fnamemodify(external_project_dir, ":t")
+  if project_name == nil then
+    return {}
+  end
+
+  local vproject_file = vim.fs.joinpath(external_project_dir, "vproject", project_name .. ".vproject")
+  if vim.uv.fs_stat(vproject_file) then
+    return M.get_workspace_folders_from_vproject_file(vproject_file, { read_only = true })
+  else
+    return {}
+  end
+end
+
 --- @class verse.project.GetActiveWorkspaceFoldersOpts
 --- @field bufnr? integer Target buffer number
 
@@ -363,22 +400,24 @@ function M.get_active_workspace_folders(opts)
       vim.list_extend(workspace_folders, client.workspace_folders)
     end
   end
-
-  if #workspace_folders < 1 then
-    local root_dir = M.find_root_dir(vim.fn.expand("%:p"))
-    if root_dir == nil then
-      vim.notify("Couldn't find a running LSP server or a project root to list digest files",
-        vim.log.levels.WARN, { title = "verse.nvim" })
-      return {}
-    end
-
-    local project_folders, _ = M.get_workspace_folders_from_root_dir(root_dir, {
-      read_only = true,
-    })
-    workspace_folders = project_folders
+  if #workspace_folders >= 1 then
+    return workspace_folders
   end
 
-  return workspace_folders
+  local fname = vim.api.nvim_buf_get_name(bufnr or 0)
+  workspace_folders = get_workspace_folders_from_digest_file(fname)
+  if #workspace_folders >= 1 then
+    return workspace_folders
+  end
+
+  local root_dir = M.find_root_dir(fname)
+  if root_dir == nil then
+    vim.notify("No running LSP server and failed to find project root to list workspace folders",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+    return {}
+  end
+
+  return M.get_workspace_folders_from_root_dir(root_dir, { read_only = true })
 end
 
 --- Lists the relevant .digest.verse files of the current project.
