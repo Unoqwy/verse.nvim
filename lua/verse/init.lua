@@ -2,6 +2,8 @@ local M = {}
 
 --- @class verse.Config
 ---
+--- Whether to setup tree-sitter-verse. Set to false if you set it up manually.
+--- @field treesitter? boolean
 --- Whether to exclusively register workspace folders that are packages in the .vproject file,
 --- ignoring the default(s).
 --- In practice, the LSP server ignores all other workspaces, so registering them is likely unwanted.
@@ -34,6 +36,7 @@ local M = {}
 
 --- @type verse.Config
 local config_defaults = {
+  treesitter = true,
   vproject_workspace_folders_only = true,
   macos_auto_delete_annoying_files = true,
   workflow_server = {
@@ -71,15 +74,8 @@ function M.setup(config)
 
   vim.lsp.enable("verse")
 
-  local ok, ts_parsers = pcall(require, "nvim-treesitter.parsers")
-  if ok then
-    local parser_config = ts_parsers.get_parser_configs()
-    parser_config["verse"] = {
-      install_info = {
-        url = "https://github.com/Unoqwy/tree-sitter-verse.git",
-        files = { "src/parser.c", "src/scanner.c" },
-      },
-    }
+  if config.treesitter == true then
+    M._setup_treesitter()
   end
 
   M._register_commands()
@@ -93,6 +89,23 @@ function M.setup(config)
         vim.uv.fs_unlink(annoying_macos_file)
       end,
     })
+  end
+end
+
+function M._setup_treesitter()
+  local ok, ts_parsers = pcall(require, "nvim-treesitter.parsers")
+  if ok then
+    local parser_config = ts_parsers.get_parser_configs()
+    if parser_config["verse"] ~= nil then
+      return
+    end
+    parser_config["verse"] = {
+      install_info = {
+        url = "https://github.com/Unoqwy/tree-sitter-verse.git",
+        files = { "src/parser.c", "src/scanner.c" },
+        revision = "740426c641640b4c97b9b01753d58f9753356803",
+      },
+    }
   end
 end
 
@@ -140,6 +153,42 @@ function M._register_commands()
   end, {
     nargs = 0,
     desc = "Temporary command to fix 'external{} macro expected here' bug without building Verse code",
+  })
+
+  vim.api.nvim_create_user_command("VerseRestart", function()
+    local verse_lsp_clients = vim.lsp.get_clients({
+      bufnr = nil,
+      name = "verse",
+    })
+    for _, client in ipairs(verse_lsp_clients) do
+      client:stop(true)
+    end
+    vim.lsp.enable("verse", false)
+
+    local timer = assert(vim.uv.new_timer())
+    timer:start(500, 0, function()
+      timer:stop()
+      timer:close()
+      vim.schedule(function()
+        vim.lsp.enable("verse", true)
+      end)
+    end)
+  end, {
+    nargs = 0,
+    desc = "(Re)starts the Verse language server",
+  })
+  vim.api.nvim_create_user_command("VerseStop", function()
+    local verse_lsp_clients = vim.lsp.get_clients({
+      bufnr = nil,
+      name = "verse",
+    })
+    for _, client in ipairs(verse_lsp_clients) do
+      client:stop(true)
+    end
+    vim.lsp.enable("verse", false)
+  end, {
+    nargs = 0,
+    desc = "Stops the Verse language server",
   })
 end
 
