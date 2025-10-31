@@ -42,10 +42,9 @@ return {
   before_init = function(params, config)
     local lsp_bin = type(config.cmd) == "table" and config.cmd[1] or nil
 
-    local compat = require("verse.compat")
-    if lsp_bin ~= nil and compat.using_wsl() and lsp_bin:match(".exe$") then
+    if lsp_bin ~= nil and lsp_bin:match(".exe$") and require("verse.compat.wsl").using_wsl() then
       config["verse_wsl_exe_compat"] = true
-      compat.inject_incoming_wsl_path_transformer()
+      require("verse.compat.wsl").inject_incoming_wsl_path_transformer()
     end
 
     local root_dir = config.root_dir or vim.fn.expand("%:p:h")
@@ -61,7 +60,7 @@ return {
     end
     params["workspaceFolders"] = lsp_workspace_folders
     if config["verse_wsl_exe_compat"] then
-      config.workspace_folders = compat.lsp_to_nvim_workspace_folders(lsp_workspace_folders)
+      config.workspace_folders = require("verse.compat.wsl").lsp_to_nvim_workspace_folders(lsp_workspace_folders)
     else
       config.workspace_folders = lsp_workspace_folders
     end
@@ -71,7 +70,7 @@ return {
     client.workspace_folders = client.config.workspace_folders
 
     if client.config["verse_wsl_exe_compat"] then
-      require("verse.compat").inject_outgoing_wsl_path_transformer(client)
+      require("verse.compat.wsl").inject_outgoing_wsl_path_transformer(client)
     end
   end,
   on_attach = function(client, bufnr)

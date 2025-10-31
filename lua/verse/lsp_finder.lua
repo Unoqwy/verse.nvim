@@ -53,13 +53,13 @@ end
 --- Finds the Verse LSP server binary.
 --- @return string?
 function M.find_lsp_binary()
-  local using_wsl = require("verse.compat").using_wsl()
+  local using_wsl = require("verse.compat.wsl").using_wsl()
 
   local home_dirs = {
     vim.fn.expand("$HOME"),
   }
   if using_wsl then
-    local win_user_dir = require("verse.compat").get_wsl_windows_user_directory()
+    local win_user_dir = require("verse.compat.wsl").get_wsl_windows_user_directory()
     if win_user_dir ~= nil then
       table.insert(home_dirs, win_user_dir)
     end

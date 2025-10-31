@@ -18,6 +18,7 @@ end
 --- @param root_dir string Root directory
 --- @return string?
 local function guess_local_appdata(root_dir)
+  -- on WSL this would also guess /mnt/<drive>/Users/<..>
   local user_prefix = root_dir:match("^(.-/Users/.-/)")
   if user_prefix == nil then
     return nil
@@ -82,7 +83,7 @@ function M.find_vproject_file_from_root_dir(root_dir)
     return vproject_search_result[1]
   end
 
-  -- if we are in a UEFN project, find .vproject from AppData
+  -- maybe we are in a UEFN project, so infer its name
   local project_name = vim.fs.basename(root_dir)
   local uefnproject_search_result = find_in_dir(root_dir, ".uefnproject$")
   if #uefnproject_search_result > 1 then
@@ -93,6 +94,7 @@ function M.find_vproject_file_from_root_dir(root_dir)
     project_name = vim.fn.fnamemodify(uefnproject_search_result[1], ":t:r")
   end
 
+  -- say we are in a UEFN project, try to find .vproject in AppData (including from WSL)
   local appdata_dir = os.getenv("LocalAppData") or guess_local_appdata(root_dir)
   if appdata_dir ~= nil then
     local vproject_file = vim.fs.joinpath(appdata_dir,
@@ -118,6 +120,48 @@ function M.find_vproject_file_from_root_dir(root_dir)
       )
       if #vproject_search_result > 0 then
         return vproject_search_result[1], project_name
+      end
+    end
+  end
+
+  -- attempt to fall back to reading auto generated .code-workspace file
+  local codews_search_result = vim.fs.find(
+    project_name .. ".code-workspace",
+    { path = root_dir, type = "file", limit = 1, upward = false }
+  )
+  local file_contents = table.concat(vim.fn.readfile(codews_search_result[1]), "\n")
+  local ok, json = pcall(vim.json.decode, file_contents)
+  if ok and json["folders"] ~= nil then
+    for _, folder in ipairs(json["folders"]) do
+      if folder["path"]:match("vproject$") ~= nil then
+        local vproject_dir_path = folder["path"]
+
+        -- the path is recognized by the local filesystem
+        if vim.uv.fs_stat(vproject_dir_path) then
+          local vproject_file = vim.fs.joinpath(vproject_dir_path, project_name .. ".vproject")
+          if vim.uv.fs_stat(vproject_file) then
+            return vproject_file, project_name
+          end
+          break
+        end
+
+        -- if despite all the above we can't have a path on Windows, we're out of luck
+        if vim.uv.os_uname().sysname == "Windows_NT" then
+          break
+        end
+
+        -- check if we can map the path to a Wine directory
+        -- this is assuming vproject_dir_path is a Windows format path
+        local wine_path = require("verse.compat.wine").resolve_wine_path(vproject_dir_path)
+        if wine_path ~= nil then
+          local vproject_file = vim.fs.joinpath(wine_path, project_name .. ".vproject")
+          if vim.uv.fs_stat(vproject_file) then
+            return vproject_file, project_name
+          end
+        end
+
+        -- well, we tried the code-workspace route...
+        break
       end
     end
   end
@@ -174,6 +218,15 @@ function M.get_workspace_folders_from_root_dir(root_dir, opts)
         })
       end
       if #result > 0 then
+        -- this is not ideal and probably won't work properly, finding the .vproject is kinda essential
+        if vim.uv.os_uname().sysname == "Windows_NT" then
+          -- on Windows it *may* slightly more likely work
+          vim.notify("Couldn't find Verse project, fell back to .code-workspace workspace folders",
+            vim.log.levels.INFO, { title = "verse.nvim" })
+        else
+          vim.notify("Couldn't find Verse project, fell back to .code-workspace workspace folders. This is unlikely to work",
+            vim.log.levels.WARN, { title = "verse.nvim" })
+        end
         return result, nil
       end
     end
@@ -187,7 +240,7 @@ end
 --- Returns the "volume prefix" part of a path.
 --- @return string
 local function get_volume_prefix(path)
-  return path:match("^(.-)/Users/")
+  return path:match("^(.*)/[Uu]sers/")
 end
 
 --- Conforms a path to the desired volume prefix.
@@ -195,8 +248,9 @@ end
 --- @param desired_volume_prefix string
 --- @return string
 local function conform_volume_prefix(original_path, desired_volume_prefix)
-  local path_post_volume = original_path:match("^.-(/Users/.+)$")
-  return vim.fs.joinpath(desired_volume_prefix, path_post_volume)
+  local path_post_volume = original_path:match("^.*(/[Uu]sers/.+)$")
+  local result = vim.fs.joinpath(desired_volume_prefix, path_post_volume)
+  return vim.uv.fs_realpath(result) or result
 end
 
 --- Remaps vproject JSON with file paths adapted to the desired volume prefix.
@@ -215,16 +269,18 @@ local function remap_json_to_virtual_vproject(json, desired_volume_prefix)
   end
 end
 
+--- @param vproject_file string
 --- @param opts verse.project.GetWorkspaceFoldersOpts
-local function consider_using_virtual_vproject(opts)
+local function consider_using_virtual_vproject(vproject_file, opts)
   local uname = vim.uv.os_uname()
   if uname.sysname ~= "Windows_NT" then
-    if opts.lsp_bin ~= nil then
-      -- don't want to use vproject when using Windows layer .exe from WSL
-      return not opts.lsp_bin:match(".exe$")
-    else
-      return true
+    if opts.lsp_bin ~= nil and opts.lsp_bin:match(".exe$") then
+      return false
     end
+
+    -- a Windows-like path in a non-Windows system means some kind of
+    -- virtual vproject is gonna be required to map paths
+    return vproject_file:match("AppData/Local") ~= nil
   end
   return false
 end
@@ -258,8 +314,10 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   --- @type string?
   local vproject_root_dir = vim.fs.dirname(vproject_file)
 
-  if opts.allow_virtual_vproject and consider_using_virtual_vproject(opts) then
-    local expected_volume_prefix = get_volume_prefix(vproject_file)
+  if opts.allow_virtual_vproject and consider_using_virtual_vproject(vproject_file, opts) then
+    -- this takes care of both WSL and Wine prefixes (though in Wine's case it's not really a "volume" prefix)
+
+    local expected_volume_prefix = get_volume_prefix(vproject_root_dir)
     local use_virtual_vproject = false
     for _, package in ipairs(packages) do
       local desc = package["desc"]
@@ -287,13 +345,13 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
           vim.uv.fs_close(fd)
           vproject_root_dir = tmp_vproject_file
         else
-          vim.notify("Failed to create virtual .vproject to circumvent external files of " .. vproject_file,
+          vim.notify("Failed to create virtual .vproject to circumvent external files of " .. vproject_root_dir,
             vim.log.levels.WARN, { title = "verse.nvim" })
           return {}
         end
       end
     end
-  elseif vproject_file:match("^/mnt/") and require("verse.compat").using_wsl() then
+  elseif vproject_file:match("^/mnt/") and require("verse.compat.wsl").using_wsl() then
     -- remap vproject directory path when under WSL to conform to volume prefix from `packages`
     local volume_prefix = get_volume_prefix(vproject_root_dir)
     local actual_volume_prefix = nil
@@ -322,7 +380,7 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   end
   for _, package in ipairs(packages) do
     local desc = package["desc"]
-    if desc ~= nil then
+    if desc ~= nil and desc["name"] ~= nil then
       local role
       local settings = desc["settings"]
       if settings ~= nil then
@@ -331,7 +389,10 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
       role = role or ""
 
       local dir_path = desc["dirPath"]
-      if dir_path ~= nil and role ~= "PersistenceCompatConstraint" then
+      if dir_path ~= nil
+        and role ~= "PersistenceCompatConstraint"
+        and not dir_path:match("/published/")
+      then
         local normalized_dir_path = vim.fs.normalize(dir_path)
         table.insert(result, {
           name = normalized_dir_path,

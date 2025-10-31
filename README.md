@@ -11,6 +11,7 @@
   * [x] Commands
   * [x] Build/Push progress
 - [x] WSL support
+- [x] CrossOver support (macOS)
 
 ## Installation
 
