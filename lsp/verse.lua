@@ -72,6 +72,8 @@ return {
     if client.config["verse_wsl_exe_compat"] then
       require("verse.compat.wsl").inject_outgoing_wsl_path_transformer(client)
     end
+
+    require("verse.compat.nil_suppression").inject_nil_suppression(client)
   end,
   on_attach = function(client, bufnr)
     vim.b[bufnr].vproject_file = client.config["vproject_file"]
