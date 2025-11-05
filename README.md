@@ -83,3 +83,10 @@ The integration is loaded only once the workflow server connects for the first t
 
 Make sure WSL uses [Mirrored mode networking](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking) for the plugin to connect to the Workflow Server running on the Windows host properly.
 
+Recommendation for performance:
+
+```powershell
+# within an elevated (Run as administrator) PowerShell:
+Add-MpPreference -ExclusionPath "C:\Users\$env:USERNAME\AppData\Local\UnrealEditorFortnite\Saved\VerseProject"
+```
+

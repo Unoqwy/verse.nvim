@@ -1,5 +1,23 @@
 local M = {}
 
+--- Reads file contents (faster than vim.fn.readfile).
+--- @param path string File path
+--- @return string? - File contents
+local function read_file(path)
+  local fd = vim.uv.fs_open(path, "r", tonumber("644", 8))
+  if not fd then
+    return nil
+  end
+  local stat =  vim.uv.fs_fstat(fd)
+  if not stat then
+    vim.uv.fs_close(fd)
+    return nil
+  end
+  local result = vim.uv.fs_read(fd, stat.size, 0)
+  vim.uv.fs_close(fd)
+  return assert(result, "File contents shouldn't be nil")
+end
+
 local function file_match(pat)
   return function(name, _)
     return name:match(pat) ~= nil
@@ -129,7 +147,7 @@ function M.find_vproject_file_from_root_dir(root_dir)
     project_name .. ".code-workspace",
     { path = root_dir, type = "file", limit = 1, upward = false }
   )
-  local file_contents = table.concat(vim.fn.readfile(codews_search_result[1]), "\n")
+  local file_contents = read_file(codews_search_result[1]) or ""
   local ok, json = pcall(vim.json.decode, file_contents)
   if ok and json["folders"] ~= nil then
     for _, folder in ipairs(json["folders"]) do
@@ -200,7 +218,7 @@ function M.get_workspace_folders_from_root_dir(root_dir, opts)
     { path = root_dir, type = "file", limit = 1, upward = false }
   )
   if #codews_search_result > 0 then
-    local file_contents = table.concat(vim.fn.readfile(codews_search_result[1]), "\n")
+    local file_contents = read_file(codews_search_result[1]) or ""
     local ok, json = pcall(vim.json.decode, file_contents)
     if not ok then
       vim.notify(".vproject not found, found a .code-workspace file instead but it isn't valid JSON (trailing comma?)",
@@ -250,6 +268,11 @@ end
 local function conform_volume_prefix(original_path, desired_volume_prefix)
   local path_post_volume = original_path:match("^.*(/[Uu]sers/.+)$")
   local result = vim.fs.joinpath(desired_volume_prefix, path_post_volume)
+  if result:match("UnrealEditorFortnite") and result:match("VerseProject") then
+    -- skip resolving potential symlink (likely enough to be actual path already)
+    -- because somehow those calls (only in AppData) are very expensive (~40ms) on WSL
+    return result
+  end
   return vim.uv.fs_realpath(result) or result
 end
 
@@ -297,13 +320,14 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
   })
 
   vproject_file = vim.fs.normalize(vproject_file)
-  local file_contents = table.concat(vim.fn.readfile(vproject_file), "\n")
+  local file_contents = read_file(vproject_file) or ""
   local json = vim.json.decode(file_contents)
   if json == nil then
     vim.notify("Invalid JSON in .vproject file: " .. vproject_file,
       vim.log.levels.WARN, { title = "verse.nvim" })
     return {}
   end
+
   local packages = json["packages"]
   if packages == nil then
     vim.notify("Unexpected .vproject format for " .. vproject_file,
@@ -333,6 +357,7 @@ function M.get_workspace_folders_from_vproject_file(vproject_file, opts)
     -- only use a virtual vproject if one of the paths would actually need remapping
     if use_virtual_vproject then
       remap_json_to_virtual_vproject(json, expected_volume_prefix)
+
       if opts.read_only then
         vproject_root_dir = nil
       else
