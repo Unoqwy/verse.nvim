@@ -121,8 +121,8 @@ function M._process_request(req)
   if req.on_response ~= nil then
     on_response = vim.schedule_wrap(req.on_response)
   end
-  M._client:send_message(proto.MessageType.Request, req.cmd, req.params, on_response)
-  if req.on_send ~= nil then
+  local sent = M._client:send_message(proto.MessageType.Request, req.cmd, req.params, on_response)
+  if req.on_send ~= nil and sent ~= nil then
     vim.schedule(req.on_send)
   end
 end

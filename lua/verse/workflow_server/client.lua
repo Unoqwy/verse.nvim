@@ -47,7 +47,7 @@ function Client.connect_new(address, port, opts)
 
   self.state = Client.ConnectionState.Connecting
   socket:connect(address, port, function(err)
-    self:_handle_connect()
+    self:_handle_connect(err)
     if err ~= nil then
       vim.schedule(function()
         notify("Connection to Verse Workflow Server at " .. address .. ":" .. port .. " failed: " .. err, log_level.WARN)
@@ -83,14 +83,25 @@ function Client:is_alive()
 end
 
 --- Shut downs the client socket connection.
-function Client:shutdown()
+--- @param err? string Error message
+function Client:shutdown(err)
   if self:is_alive() then
     self.socket:read_stop()
     self.socket:shutdown(function()
       self.state = Client.ConnectionState.Disconnected
       self.connect_timestamp = nil
+
+      local pending_reqs = self.pending_reqs
+      self.pending_reqs = {}
+      for _, callback in pairs(pending_reqs) do
+        -- should each be schedule_wrap'd
+        callback("Connection terminated", nil)
+      end
+
       if self.opts.on_disconnect ~= nil then
-        vim.schedule(self.opts.on_disconnect)
+        vim.schedule(function()
+          self.opts.on_disconnect(err)
+        end)
       end
     end)
   end
@@ -199,10 +210,7 @@ function Client:_recv(err, data)
     end
     return
   elseif data == nil then
-    vim.schedule(function()
-      notify("Connection to Verse Workflow Server terminated")
-    end)
-    self:shutdown()
+    self:shutdown("Connection terminated")
     return
   end
 
