@@ -4,6 +4,11 @@ local M = {}
 ---
 --- Whether to setup tree-sitter-verse. Set to false if you set it up manually.
 --- @field treesitter? boolean
+--- Path to a custom Verse LSP binary (use array to pass args). If nil, will attempt to be found automatically.
+--- Prefer this setting over a custom lsp config to benefit from workspace folders and compatibility features.
+--- @field lsp_binary? string|string[]
+--- Options to connect to the LSP server in TCP mode (useful for debugging the server).
+--- @field lsp_tcp_mode? verse.LspTcpMode
 --- Whether to exclusively register workspace folders that are packages in the .vproject file,
 --- ignoring the default(s).
 --- In practice, the LSP server ignores all other workspaces, so registering them is likely unwanted.
@@ -18,6 +23,15 @@ local M = {}
 --- @field debug? boolean
 --- Integrations related options.
 --- @field integrations? verse.IntegrationsConfig
+
+--- @class verse.LspTcpMode
+---
+--- Whether to use TCP to connect to the LSP server.
+--- @field enabled? boolean
+--- LSP server address.
+--- @field address? string
+--- LSP server port.
+--- @field port? integer
 
 --- @class verse.WorkflowServerConfig
 ---
@@ -37,6 +51,12 @@ local M = {}
 --- @type verse.Config
 local config_defaults = {
   treesitter = true,
+  lsp_binary = nil,
+  lsp_tcp_mode = {
+    enabled = false,
+    address = "127.0.0.1",
+    port = 9010,
+  },
   vproject_workspace_folders_only = true,
   macos_auto_delete_annoying_files = true,
   workflow_server = {

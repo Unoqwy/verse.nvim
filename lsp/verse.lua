@@ -1,12 +1,7 @@
 local vproject = require("verse.project")
 
-local function default_cmd()
-  local lsp_bin = require("verse.lsp_finder").find_lsp_binary()
-  if not lsp_bin or not vim.uv.fs_stat(lsp_bin) then
-    return vim.notify("Verse LSP server could not be found. Is the official VSCode extension installed?",
-      vim.log.levels.WARN, { title = "verse.nvim" })
-  end
-
+--- @param lsp_bin string LSP binary path
+local function ensure_binary_executable(lsp_bin)
   if vim.fn.executable(lsp_bin) == 0 then
     local os = vim.uv.os_uname().sysname
     local made_exec = false
@@ -21,15 +16,58 @@ local function default_cmd()
         vim.log.levels.WARN, { title = "verse.nvim" })
     end
   end
+end
+
+--- Resolves the default LSP cmd by finding the binary.
+--- @return string[]
+local function resolve_default_cmd()
+  local lsp_bin = require("verse.lsp_finder").find_lsp_binary()
+
+  if not lsp_bin or not vim.uv.fs_stat(lsp_bin) then
+    vim.notify("Verse LSP server could not be found. Is the official VSCode extension installed?",
+      vim.log.levels.WARN, { title = "verse.nvim" })
+    return {}
+  end
 
   return { lsp_bin }
 end
 
----@type vim.lsp.Config
+--- @type vim.lsp.Config
 return {
   name = "verse",
-  filetypes = { "verse" },
-  cmd = default_cmd(),
+  filetypes = { "verse", "vproject" },
+  cmd = function(dispatchers, config)
+    local verse_config = require("verse").get_config()
+
+    local tcp_mode = verse_config.lsp_tcp_mode or {}
+    if tcp_mode.enabled == true then
+      return vim.lsp.rpc.connect(tcp_mode.address or "127.0.0.1", tcp_mode.port)(dispatchers)
+    end
+
+    --- @type any
+    local cmd = {}
+    if verse_config.lsp_binary ~= nil then
+      if type(verse_config.lsp_binary) == "string" then
+        cmd = { verse_config.lsp_binary }
+      else
+        cmd = verse_config.lsp_binary
+      end
+    else
+      cmd = resolve_default_cmd()
+    end
+    config["last_resolved_cmd"] = cmd
+
+    local lsp_bin = cmd[1]
+    if lsp_bin ~= nil then
+      ensure_binary_executable(lsp_bin)
+    end
+
+    return vim.lsp.rpc.start(cmd, dispatchers, {
+      cwd = config.cmd_cwd,
+      env = config.cmd_env,
+      detached = config.detached,
+    })
+  end,
   root_dir = function(bufnr, on_dir)
     local fname = vim.api.nvim_buf_get_name(bufnr)
     on_dir(vproject.find_root_dir(fname))
@@ -40,7 +78,16 @@ return {
     return vproject_file ~= nil and client.config["vproject_file"] == vproject_file
   end,
   before_init = function(params, config)
-    local lsp_bin = type(config.cmd) == "table" and config.cmd[1] or nil
+    local lsp_bin
+    if config["last_resolved_cmd"] ~= nil then
+      local true_cmd = config["last_resolved_cmd"]
+      lsp_bin = true_cmd[1]
+
+      -- set to resolved cmd to view it from `:checkhealth vim.lsp`
+      config.cmd = true_cmd
+    else
+      lsp_bin = type(config.cmd) == "table" and config.cmd[1] or nil
+    end
 
     if lsp_bin ~= nil and lsp_bin:match(".exe$") and require("verse.compat.wsl").using_wsl() then
       config["verse_wsl_exe_compat"] = true
