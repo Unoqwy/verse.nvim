@@ -6,7 +6,7 @@
 
 - [x] Tree-sitter syntax highlighting ([tree-sitter-verse](https://github.com/Unoqwy/tree-sitter-verse))
 - [x] Use the LSP server from the official VSCode extension (finds it locally)
-- [x] Find and load .vproject from anywhere in a UEFN project
+- [x] Directly open any file within a UEFN project (finds .vproject to resolve workspace folders automatically)
 - [x] Verse Workflow Server support
   * [x] Commands
   * [x] Build/Push progress
