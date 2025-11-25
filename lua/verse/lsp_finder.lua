@@ -112,7 +112,7 @@ function M._extract_uefn_extension(found_version)
   local vsix_version = content:match("<Identity[^>]-Version=\"([^\"]+)\"")
 
   notify(string.format("Verse.vsix version: %s, found installed version: %s", vsix_version, found_version or "NONE"), log_level.DEBUG)
-  if found_version == nil or found_version >= vsix_version then
+  if found_version ~= nil and found_version >= vsix_version then
     return nil
   end
 
