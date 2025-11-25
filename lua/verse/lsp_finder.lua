@@ -111,8 +111,8 @@ function M._extract_uefn_extension(found_version)
   local content = vim.fn.trim(manifest_result.stdout or "")
   local vsix_version = content:match("<Identity[^>]-Version=\"([^\"]+)\"")
 
-  notify(string.format("Verse.vsix version: %s, found installed version: %s", vsix_version, found_version), log_level.DEBUG)
-  if found_version >= vsix_version then
+  notify(string.format("Verse.vsix version: %s, found installed version: %s", vsix_version, found_version or "NONE"), log_level.DEBUG)
+  if found_version == nil or found_version >= vsix_version then
     return nil
   end
 
