@@ -1,7 +1,6 @@
 local M = {}
 
 --- @class verse.Config
----
 --- Whether to setup tree-sitter-verse. Set to false if you set it up manually.
 --- @field treesitter? boolean
 --- Path to a custom Verse LSP binary (use array to pass args). If nil, will attempt to be found automatically.
@@ -9,6 +8,8 @@ local M = {}
 --- @field lsp_binary? string|string[]
 --- Options to connect to the LSP server in TCP mode (useful for debugging the server).
 --- @field lsp_tcp_mode? verse.LspTcpMode
+--- Verse.vsix extract options.
+--- @field uefn_extract? verse.UefnExtractConfig
 --- Whether to exclusively register workspace folders that are packages in the .vproject file,
 --- ignoring the default(s).
 --- In practice, the LSP server ignores all other workspaces, so registering them is likely unwanted.
@@ -25,7 +26,6 @@ local M = {}
 --- @field integrations? verse.IntegrationsConfig
 
 --- @class verse.LspTcpMode
----
 --- Whether to use TCP to connect to the LSP server.
 --- @field enabled? boolean
 --- LSP server address.
@@ -33,8 +33,14 @@ local M = {}
 --- LSP server port.
 --- @field port? integer
 
+--- @class verse.UefnExtractConfig
+--- Whether to automatically extract the LSP server from the Verse.vsix shipped with UEFN.
+--- Version checks ensure it's extracted again after updates.
+--- @field enabled? boolean
+--- Override path to Verse.vsix file. Set if the plugin fails to infer your UEFN installation directory.
+--- @field vsix_path? string
+
 --- @class verse.WorkflowServerConfig
----
 --- Default address of the workflow server.
 --- @field default_address? string
 --- Default port of the workflow server.
@@ -44,7 +50,6 @@ local M = {}
 --- @field auto_connect? boolean
 
 --- @class verse.IntegrationsConfig
----
 --- Whether to use fidget.nvim to display spinning progress from the Workflow Server.
 --- @field fidget_nvim? boolean
 
@@ -56,6 +61,10 @@ local config_defaults = {
     enabled = false,
     address = "127.0.0.1",
     port = 9010,
+  },
+  uefn_extract = {
+    enabled = true,
+    vsix_path = nil,
   },
   vproject_workspace_folders_only = true,
   macos_auto_delete_annoying_files = true,
@@ -234,6 +243,9 @@ end
 --- @return fun(msg:string, level?:integer)
 function M.create_notifier(title)
   return function(msg, level)
+    if level <= vim.log.levels.DEBUG and not M.debug_enabled() then
+      return
+    end
     vim.notify(msg, level, {
       title = title,
     })

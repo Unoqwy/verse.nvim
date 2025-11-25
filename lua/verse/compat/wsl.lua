@@ -10,8 +10,30 @@ function M.using_wsl()
     or vim.uv.os_uname().release:match("-Microsoft$")
 end
 
+--- Gets the value of a Windows environment variable from within WSL.
+--- @param env_var string Environment variable
+--- @return string?
+function M.get_windows_env(env_var)
+  local cmd_exe_bin = nil
+  if os.getenv("WSL_DISTRO_NAME") ~= nil then -- if present WSL is initialized properly
+    cmd_exe_bin = "cmd.exe"
+  elseif vim.uv.fs_stat("/mnt/c/WINDOWS/system32/cmd.exe") then
+    cmd_exe_bin = "/mnt/c/WINDOWS/system32/cmd.exe"
+  end
+
+  if cmd_exe_bin ~= nil then
+    local cmd_result = vim.system({cmd_exe_bin, "/c", "echo", "%" .. env_var .. "%"}):wait()
+    if cmd_result.code ~= 0 then
+      return nil
+    end
+    return vim.fn.trim(cmd_result.stdout)
+  else
+    return vim.env.getenv(env_var)
+  end
+end
+
 --- Gets the Windows User Directory from within WSL.
---- @return string? Directory path
+--- @return string? # Directory path
 function M.get_wsl_windows_user_directory()
   local cmd_exe_bin = nil
   if os.getenv("WSL_DISTRO_NAME") ~= nil then -- if present WSL is initialized properly
@@ -109,7 +131,7 @@ end
 function M.lsp_to_nvim_workspace_folders(lsp_workspace_folders)
   local result = {}
   for _, lsp_workspace_folder in ipairs(lsp_workspace_folders) do
-    local new_fname = M._win_to_wsl_fname(lsp_workspace_folder.name)
+    local new_fname = M.win_to_wsl_fname(lsp_workspace_folder.name)
     table.insert(result, {
       name = new_fname,
       uri = vim.uri_from_fname(new_fname),
@@ -140,10 +162,10 @@ end
 
 --- @param fname string
 --- @return string
-function M._win_to_wsl_fname(fname)
-  local drive, path = fname:match("^([A-Z]):(.+)$")
+function M.win_to_wsl_fname(fname)
+  local drive, path = vim.fs.normalize(fname):match("^([A-Z]):[\\\\/]*(.+)$")
   if drive ~= nil and path ~= nil then
-    return vim.fs.joinpath("/mnt", drive:lower(), vim.fs.normalize(path))
+    return vim.fs.joinpath("/mnt", drive:lower(), path)
   end
   return fname
 end

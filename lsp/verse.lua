@@ -22,13 +22,9 @@ end
 --- @return string[]
 local function resolve_default_cmd()
   local lsp_bin = require("verse.lsp_finder").find_lsp_binary()
-
-  if not lsp_bin or not vim.uv.fs_stat(lsp_bin) then
-    vim.notify("Verse LSP server could not be found. Is the official VSCode extension installed?",
-      vim.log.levels.WARN, { title = "verse.nvim" })
+  if lsp_bin == nil then
     return {}
   end
-
   return { lsp_bin }
 end
 
