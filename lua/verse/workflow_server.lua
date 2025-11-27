@@ -211,7 +211,7 @@ end
 ---
 --- Whether to only push Verse changes. If false, pushes all changes.
 --- @field verse_only? boolean
---- @field skip_prebuild? boolean
+--- @field prebuild? boolean
 
 --- Requests the server to push changes
 --- @param opts? verse.workflow_server.PushChangesOpts
@@ -235,7 +235,7 @@ function M.push_changes(opts)
   end
 
   if not state.can_push_verse_changes then
-    if not opts.skip_prebuild then
+    if opts.prebuild then
       local callback = function(built)
         if built then
           local timer = vim.uv.new_timer()
@@ -245,7 +245,7 @@ function M.push_changes(opts)
           timer:start(SERVER_STATE_PROPAGATION_LEEWAY_MS, 0, function()
             timer:stop()
             timer:close()
-            M.push_changes(vim.tbl_extend("force", opts, { skip_prebuild = true }))
+            M.push_changes(vim.tbl_extend("force", opts, { prebuild = false }))
           end)
         end
       end
@@ -255,12 +255,8 @@ function M.push_changes(opts)
         callback = callback,
         no_request_print = true,
       })
-    else
-      -- TODO : This requirement can be removed once the workflow server gets fixed and it
-      --        starts consistently sending a response to pushChanges requests again.
-      notify("Cannot " .. action_name .. " according to server", log_level.WARN)
+      return
     end
-    return
   end
 
   M._send_request({

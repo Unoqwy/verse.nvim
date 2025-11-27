@@ -243,7 +243,7 @@ end
 --- @return fun(msg:string, level?:integer)
 function M.create_notifier(title)
   return function(msg, level)
-    if level <= vim.log.levels.DEBUG and not M.debug_enabled() then
+    if level ~= nil and level <= vim.log.levels.DEBUG and not M.debug_enabled() then
       return
     end
     vim.notify(msg, level, {
