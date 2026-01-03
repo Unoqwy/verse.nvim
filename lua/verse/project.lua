@@ -448,6 +448,10 @@ end
 --- Finds workspace folders, walking back from a digest file external to the project tree.
 --- @return lsp.WorkspaceFolder[] Workspace folders, empty if not found
 local function get_workspace_folders_from_digest_file(fname)
+  if #fname == 0 then
+    return {}
+  end
+
   local external_project_dir = find_dir_parented_by("VerseProject", fname)
   if external_project_dir == nil then
     return {}
@@ -491,6 +495,7 @@ function M.get_active_workspace_folders(opts)
   end
 
   local fname = vim.api.nvim_buf_get_name(bufnr or 0)
+  -- if we are in a digest file, walk back
   workspace_folders = get_workspace_folders_from_digest_file(fname)
   if #workspace_folders >= 1 then
     return workspace_folders
