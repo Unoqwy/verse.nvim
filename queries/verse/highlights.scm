@@ -1,291 +1,313 @@
+; Comments
 (line_comment) @comment @spell
 (block_comment) @comment @spell
-(indent_comment) @comment @spell
+
+; Operators
+[
+  ":="
+  "+="
+  "-="
+  "*="
+  "/="
+  "="
+  "<>"
+  "<"
+  "<="
+  ">"
+  ">="
+  "+"
+  "-"
+  "*"
+  "/"
+  "&"
+  "|"
+  ".."
+  "->"
+  "=>"
+  "?"
+  "^"
+] @operator
+
+; Punctuation
+["(" ")" "[" "]" "{" "}"] @punctuation.bracket
+["," ";" "." ":"] @punctuation.delimiter
 
 ; Literals
-(string
-  ["\"" "\""] @string)
-(string_fragment) @string
+(string) @string
 (escape_sequence) @string.escape
-(char) @string
-(integer) @number
-(float) @number
-(logic_literal) @boolean
+(interpolation
+  ["{" "}"] @punctuation.special)
+(char_literal) @string
+(integer_literal) @number
+(float_literal) @number
+(boolean_literal) @boolean
 (path_literal) @namespace
 
+; Identifiers
 (identifier) @variable
 ((identifier) @variable.builtin
   (#match? @variable.builtin "^(Self)$"))
 
-(function_call
-  function: (identifier) @function.call)
-(of_expression
-  lhs: (identifier) @function.call)
+; Field access (before function calls so method calls win)
+(member_expression
+  member: (identifier) @variable.member)
 
-([
-  (function_call
-    function: (identifier) @keyword.import)
-  (of_expression
-    lhs: (identifier) @keyword.import)
-] (#match? @keyword.import "^(import)$"))
-([
-  (function_call
-    function: (identifier) @function.builtin)
-  (of_expression
-    lhs: (identifier) @function.builtin)
-] (#match? @function.builtin "^(generator|subtype|castable_subtype|tuple)$"))
+; Function calls
+(call_expression
+  function: [
+    (identifier) @function.call
+    (member_expression
+      member: (identifier) @function.call)
+    (decorated_expression
+      operand: [
+        (identifier) @function.call
+        (member_expression
+          member: (identifier) @function.call)
+      ])
+  ])
 
-; Namespaces usage
-(qualifier
+; Imports
+(using_statement
+  "using" @keyword.import)
+(using_statement
   (identifier) @namespace)
-(qualifier
-  (identifier) @namespace.builtin
+((call_expression
+  function: (identifier) @keyword.import)
+  (#match? @keyword.import "^(import)$"))
+((call_expression
+  function: (identifier) @keyword.import
+  arguments: (argument_list
+    (argument [(string) (path_literal)] @namespace)))
+  (#match? @keyword.import "^(import)$"))
+
+; Builtin functions
+((call_expression
+  function: (identifier) @function.builtin)
+  (#match? @function.builtin "^(generator|subtype|castable_subtype|tuple|weak_map)$"))
+
+; Namespaces / qualified access ((path:)Name, (super:)Name, (local:)Name)
+(qualified_access
+  qualifier: (parenthesized_expression
+    (type_annotation
+      value: (identifier) @namespace)))
+((qualified_access
+  qualifier: (parenthesized_expression
+    (type_annotation
+      value: (identifier) @namespace.builtin)))
   (#match? @namespace.builtin "^(super|local)$"))
 
+; Macros
+(macro_block
+  head: (identifier) @function.macro)
+
+((macro_block
+  head: (identifier) @keyword.macro)
+  (#match? @keyword.macro "^(race|rush|profile|external)$"))
+((macro_block
+  head: (call_expression
+    function: (identifier) @keyword.macro))
+  (#match? @keyword.macro "^(race|rush|profile|external)$"))
+((macro_block
+  head: (call_expression
+    function: (identifier) @keyword.repeat))
+  (#match? @keyword.repeat "^(while)$"))
+
+; Named arguments: Foo(Name := value)
+(argument_list
+  (argument
+    (assignment_expression
+      left: (identifier) @variable.parameter)))
+
+; Definition names (X := value). Only direct children of a block scope, so
+; named arguments and archetype fields are excluded
 ([
-  (function_call
-    function: (identifier) @_
-    (_) @namespace)
-  (of_expression
-    lhs: (identifier) @_
-    rhs: (_) @namespace)
-] (#match? @_ "^(import)$"))
+  (source_file
+    (assignment_expression
+      left: (identifier) @constant))
+  (indented_block
+    (assignment_expression
+      left: (identifier) @constant))
+  (braced_block
+    (assignment_expression
+      left: (identifier) @constant))
+  (block_indent
+    (assignment_expression
+      left: (identifier) @constant))
+])
 
-(macro_call
-  macro: (identifier) @_
-  (block
-    (_) @namespace)
-  (#match? @_ "^(using|scoped)$"))
+; Type keywords
+(class_expression "class" @keyword.type)
+(struct_expression "struct" @keyword.type)
+(interface_expression "interface" @keyword.type)
+(enum_expression "enum" @keyword.type)
+(module_expression "module" @keyword.type)
 
-(macro_call
-  macro: (identifier) @function.macro)
+; Type definition names
+(assignment_expression
+  left: (identifier) @type
+  right: [
+    (class_expression)
+    (struct_expression)
+    (interface_expression)
+    (enum_expression)
+  ])
+(assignment_expression
+  left: (identifier) @module
+  right: (module_expression))
 
-; Field access
-(field_expression
-  field: (identifier) @variable.member)
-(function_call
-  function: (field_expression
-    field: (identifier) @function.call))
+; Enum members
+(enum_expression
+  (braced_block
+    (identifier) @constant))
 
-; Declarations
-(declaration
-  lhs: "("*
-  lhs: (identifier) @constant)
-(declaration
-  (var_keyword) @keyword
-  lhs: "("*
-  lhs: (identifier) @variable)
-(set_expression
-  lhs: (identifier) @variable)
+; Archetypes
+(archetype_instantiation
+  type: (identifier) @type)
+(archetype_instantiation
+  (assignment_expression
+    left: (identifier) @property))
+((archetype_instantiation
+  type: (identifier) @keyword.macro)
+  (#match? @keyword.macro "^(external)$"))
 
-(named_argument
-  name: (identifier) @variable.parameter)
-
-; Type references
-(unary_expression
-  operator: "?"
-  operand: (identifier) @type)
-(map_container
-  key: (identifier) @type)
-(map_container
-  value: (identifier) @type)
-(array_container
-  value: (identifier) @type)
-(function_declaration
-  ret_type: (identifier) @type)
-(declaration
-  type_hint: (identifier) @type)
-
+; Type references (annotations, var/return types, type constructors, supertypes)
 ([
-  (unary_expression
-    operator: "?"
-    operand: (identifier) @type.builtin)
-  (map_container
-    key: (identifier) @type.builtin)
-  (map_container
-    value: (identifier) @type.builtin)
-  (array_container
-    value: (identifier) @type.builtin)
-  (function_declaration
-    ret_type: (identifier) @type.builtin)
-  (declaration
-    type_hint: (identifier) @type.builtin)
-] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|option|any)$"))
+  (type_annotation type: (identifier) @type)
+  (var_definition type: (identifier) @type)
+  (function_definition return_type: (identifier) @type)
+  (optional_type (identifier) @type)
+  (array_type (identifier) @type)
+  (map_type (identifier) @type)
+  (type_prefix (identifier) @type)
+  (supertype_clause (identifier) @type)
+])
 
-; for (e:iterator)
-(macro_call
-  macro: (identifier) @_
-  arguments: (argument_list
-    (declaration
-      type_hint: (identifier) @variable))
-  (#match? @_ "^(for)$"))
-
-; Archetype
+; Builtin types
 ([
-  (macro_call
-    macro: (identifier) @type
-    (block))
-  (macro_call
-    macro: (identifier) @type
-    (block
-      (declaration
-        lhs: (identifier) @property)))
-] (#not-match? @type "^(module|struct|class|enum|interface|profile|using|map|array|logic|option|spawn|sync|race|rush|branch|defer|type|external|for|loop|while|do|if|else|case|then|block)$"))
+  (type_annotation type: (identifier) @type.builtin)
+  (var_definition type: (identifier) @type.builtin)
+  (function_definition return_type: (identifier) @type.builtin)
+  (optional_type (identifier) @type.builtin)
+  (array_type (identifier) @type.builtin)
+  (map_type (identifier) @type.builtin)
+  (type_prefix (identifier) @type.builtin)
+  (supertype_clause (identifier) @type.builtin)
+] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|any|comparable|type)$"))
 
-(macro_call
-  macro: (identifier)
-  (block
-    (comma_separated_group
-      (declaration
-        lhs: (identifier) @variable.member))))
+; Function / constructor definition names. Handles F(), F<spec>(), F()<effect>, F<spec>()<effect>
+(function_definition
+  signature: [
+    (call_expression
+      function: [
+        (identifier) @function.definition
+        (decorated_expression operand: (identifier) @function.definition)
+      ])
+    (decorated_expression
+      operand: (call_expression
+        function: [
+          (identifier) @function.definition
+          (decorated_expression operand: (identifier) @function.definition)
+        ]))
+  ])
+(assignment_expression
+  left: [
+    (call_expression
+      function: [
+        (identifier) @function.definition
+        (decorated_expression operand: (identifier) @function.definition)
+      ])
+    (decorated_expression
+      operand: (call_expression
+        function: [
+          (identifier) @function.definition
+          (decorated_expression operand: (identifier) @function.definition)
+        ]))
+  ])
 
-; Builtin macros
-([
-  (declaration
-    lhs: "("*
-    lhs: (identifier) @type
-    rhs: (macro_call
-      macro: (identifier) @_))
-  (declaration
-    rhs: (macro_call
-      macro: (identifier) @_
-      arguments: (argument_list
-        (identifier) @type)))
-] (#match? @_ "^(struct|class|enum|interface)$"))
+; Function parameters: typed arguments only appear in parameter lists
+(argument
+  (type_annotation
+    value: (identifier) @variable.parameter))
 
-(declaration
-  lhs: "("*
-  lhs: (identifier) @module
-  rhs: (macro_call
-    macro: (identifier) @_)
-  (#match? @_ "^(module)$"))
-
-(macro_call
-  macro: (identifier) @keyword.import
-  (#match? @keyword.import "^(using)$"))
-(macro_call
-  macro: (identifier) @keyword.macro
-  (#match? @keyword.macro "^(profile|spawn|sync|race|rush|branch|defer|external)$"))
-(macro_call
-  macro: (identifier) @keyword.macro.type
-  (#match? @keyword.macro.type "^(map|array|logic|type)$"))
-(macro_call
-  macro: (identifier) @keyword.type
-  (#match? @keyword.type "^(module|struct|class|enum|interface)$"))
-
-(macro_call
-  macro: (identifier) @keyword.conditional
-  (#match? @keyword.conditional "^(if|else|case|then)$"))
-(else_keyword) @keyword.conditional
-
-(macro_call
-  macro: (identifier) @keyword.repeat
-  (#match? @keyword.repeat "^(for|loop|while|do)$"))
-
-; Function declaration
-(function_declaration
-  name: (_) @function.definition)
-(function_declaration
-  (declaration
-    lhs: (identifier) @variable.parameter))
-(function_declaration
-  (unary_expression
-    (declaration
-      lhs: (identifier) @variable.parameter)))
-
-(function_declaration
-  name: (identifier) @constructor.builtin
+; Operator-named functions (e.g. operator'+')
+(function_definition
+  signature: (call_expression
+    function: (identifier) @constructor.builtin)
   (#match? @constructor.builtin "^_+$"))
 
-; Tokens
-[
- "{"
- "}"
- "("
- ")"
- "["
- "]"
- ":)"
-] @punctuation.bracket
+; Definitions
+(var_definition
+  "var" @keyword)
+(var_definition
+  name: (identifier) @variable)
+(set_expression
+  "set" @keyword)
+(set_expression
+  target: (identifier) @variable)
+(ref_expression
+  "ref" @keyword)
+(var_definition
+  "live" @keyword)
+(live_binding
+  "live" @keyword)
 
-[
- ";"
- ","
- "."
- ". "
-] @punctuation.delimiter
+; Control flow keywords
+(if_expression
+  ["if" "then" "else"] @keyword.conditional)
+(case_expression "case" @keyword.conditional)
+(for_expression
+  ["for" "do"] @keyword.repeat)
+(loop_expression "loop" @keyword.repeat)
+(block_expression "block" @keyword)
+(return_expression "return" @keyword)
+(break_expression) @keyword
+(continue_expression) @keyword
+(yield_expression "yield" @keyword)
+(spawn_expression "spawn" @keyword.macro)
+(sync_expression "sync" @keyword.macro)
+(branch_expression "branch" @keyword.macro)
+(defer_expression "defer" @keyword.macro)
 
-[
-  "*"
-  "/"
-  "+"
-  "-"
-  "="
-  "<>"
-  "<"
-  ">"
-  "<="
-  ">="
-  "?"
-  ":"
-  "macro:"
-  ":="
-  "->"
-  ".."
-  "=>"
-] @operator
+; Container keywords
+(array_literal "array" @keyword.macro.type)
+(map_literal "map" @keyword.macro.type)
+(option_literal "option" @keyword.macro.type)
+(tuple_expression "tuple" @keyword.macro.type)
 
-[
-  "set"
-  "return"
-  (continue_expression)
-  (break_expression)
-] @keyword
-
-[
-  "and"
-  "or"
-  "not"
-  "of"
-  "to"
-  "where"
-] @keyword.operator
-
+; Word operators
+(binary_expression
+  ["and" "or" "where" "when" "over" "of" "is" "in" "to"] @keyword.operator)
+(binary_expression
+  "while" @keyword.repeat)
 (unary_expression
-  (_)
+  "not" @keyword.operator)
+(postfix_query "?" @keyword.operator)
+
+; Function calls for `of` keyword
+(binary_expression
+  left: [
+    (identifier) @function.call
+    (member_expression
+      member: (identifier) @function.call)
+  ]
   .
-  "?" @keyword.operator)
+  "of")
 
-; Attributes
-(at_attributes
-  ["@"] @annotation.delimiter
-  (identifier) @annotation)
-(at_attributes
-  ["@"] @annotation.delimiter
-  (macro_call
-    macro: (identifier) @annotation))
-
-(attributes
-  (identifier) @attribute)
-(attributes
-  (macro_call
-    macro: (identifier) @attribute))
-(attributes
+; Attributes/specifiers
+(specifier
   ["<" ">"] @attribute.delimiter)
+(specifier
+  name: (identifier) @attribute)
 
-([
-  (attributes
-    "<" @attribute.visibility.delimiter
-    .
-    (identifier) @attribute.visibility @_
-    .
-    ">" @attribute.visibility.delimiter)
-  (attributes
-    "<" @attribute.visibility.delimiter
-    .
-    (macro_call
-      macro: (identifier) @attribute.visibility @_)
-    .
-    ">" @attribute.visibility.delimiter)
-] (#match? @_ "^(internal|public|private|protected|scoped)$"))
+; Visibility specifiers highlight the whole <...> (brackets included)
+((specifier
+  "<" @attribute.visibility.delimiter
+  name: (identifier) @attribute.visibility
+  ">" @attribute.visibility.delimiter)
+  (#match? @attribute.visibility "^(internal|public|private|protected|scoped)$"))
 
+; Annotations (@-form)
+(annotation
+  "@" @annotation.delimiter)
+(annotation
+  name: (identifier) @annotation)

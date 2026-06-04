@@ -123,8 +123,12 @@ end
 
 function M._setup_treesitter()
   local ok, ts_parsers = pcall(require, "nvim-treesitter.parsers")
-  if ok then
-    local parser_config = ts_parsers.get_parser_configs()
+  if not ok then
+    return
+  end
+
+  local legacy_plugin, parser_config = pcall(ts_parsers.get_parser_configs)
+  if legacy_plugin then
     if parser_config["verse"] ~= nil then
       return
     end
@@ -132,7 +136,15 @@ function M._setup_treesitter()
       install_info = {
         url = "https://github.com/Unoqwy/tree-sitter-verse.git",
         files = { "src/parser.c", "src/scanner.c" },
-        revision = "740426c641640b4c97b9b01753d58f9753356803",
+      },
+    }
+  else
+    if ts_parsers["verse"] ~= nil then
+      return
+    end
+    ts_parsers["verse"] = {
+      install_info = {
+        url = "https://github.com/Unoqwy/tree-sitter-verse.git",
       },
     }
   end
