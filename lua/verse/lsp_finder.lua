@@ -132,16 +132,22 @@ function M._extract_uefn_extension(found_version)
   local extracted_ext_dir = vim.fs.joinpath(extensions_dir, ext_dir_name)
 
   local tmp_extract_dir = vim.fs.joinpath(extensions_dir, "tmp")
+  -- clean up any leftovers from a previous failed run, otherwise `unzip` would
+  -- prompt to overwrite existing files and hang on EOF (no stdin)
+  vim.fn.delete(tmp_extract_dir, "rf")
   local extract_result = vim.system(
-    {"unzip", "-d", tmp_extract_dir, vsix_path, "extension/bin/*"},
+    -- `-o` overwrites without prompting (belt-and-suspenders with the cleanup above)
+    {"unzip", "-o", "-d", tmp_extract_dir, vsix_path, "extension/bin/*"},
     { text = true }
   ):wait(3000)
   if extract_result.code == 0 then
+    -- fs_rename fails if the destination is a non-empty dir, so clear it first
+    vim.fn.delete(extracted_ext_dir, "rf")
     vim.uv.fs_rename(vim.fs.joinpath(tmp_extract_dir, "extension"), extracted_ext_dir)
   else
     notify("Verse.vsix failed to extract: " .. extract_result.stderr, log_level.WARN)
   end
-  vim.uv.fs_rmdir(tmp_extract_dir)
+  vim.fn.delete(tmp_extract_dir, "rf")
 
   if vim.uv.fs_stat(extracted_ext_dir) then
     vim.schedule(function()

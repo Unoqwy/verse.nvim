@@ -4,6 +4,9 @@ local M = {}
 --- @param path string File path
 --- @return string? - File contents
 local function read_file(path)
+  if path == nil then
+    return nil
+  end
   local fd = vim.uv.fs_open(path, "r", tonumber("644", 8))
   if not fd then
     return nil
