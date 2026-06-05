@@ -48,9 +48,30 @@
 ((identifier) @variable.builtin
   (#match? @variable.builtin "^(Self)$"))
 
-; Field access (before function calls so method calls win)
+; Field access
 (member_expression
   member: (identifier) @variable.member)
+
+; Infer based on casing convention: snake_case is for types/modules
+; snake.snake => namespace.type, e.g. `ui.text_button_kind`
+((member_expression
+  object: (identifier) @namespace
+  member: (identifier) @type)
+  (#match? @namespace "^[a-z][a-z0-9_]*$")
+  (#match? @type "^[a-z][a-z0-9_]*$"))
+; snake.Pascal => type.enumMember (classes don't have static fields other than enum members)
+((member_expression
+  object: (identifier) @type
+  member: (identifier) @constant.enumMember)
+  (#match? @type "^[a-z][a-z0-9_]*$")
+  (#match? @constant.enumMember "^[A-Z]"))
+; (...snake).Pascal => enumMember on a qualified type, e.g. `ui.text_button_kind.Regular`
+((member_expression
+  object: (member_expression
+    member: (identifier) @type)
+  member: (identifier) @constant.enumMember)
+  (#match? @type "^[a-z][a-z0-9_]*$")
+  (#match? @constant.enumMember "^[A-Z]"))
 
 ; Function calls
 (call_expression
@@ -66,11 +87,39 @@
       ])
   ])
 
+; Failable function calls (subscript syntax: Foo[args])
+(subscript_expression
+  object: [
+    (identifier) @function.call
+    (member_expression
+      member: (identifier) @function.call)
+    (decorated_expression
+      operand: [
+        (identifier) @function.call
+        (member_expression
+          member: (identifier) @function.call)
+      ])
+  ])
+
+; Infer based on casing convention: `snake_case[Value]` is a type cast not a function call
+((subscript_expression
+  object: (identifier) @type)
+  (#match? @type "^[a-z][a-z0-9_]*$"))
+((subscript_expression
+  object: (member_expression
+    member: (identifier) @type))
+  (#match? @type "^[a-z][a-z0-9_]*$"))
+
 ; Imports
 (using_statement
   "using" @keyword.import)
 (using_statement
-  (identifier) @namespace)
+  (identifier) @namespace
+  (#set! "priority" 105))
+(using_statement
+  (member_expression) @namespace
+  (#set! "priority" 105))
+
 ((call_expression
   function: (identifier) @keyword.import)
   (#match? @keyword.import "^(import)$"))
@@ -112,11 +161,13 @@
     function: (identifier) @keyword.repeat))
   (#match? @keyword.repeat "^(while)$"))
 
-; Named arguments: Foo(Name := value)
+; Named arguments: Foo(Name := value) and Foo(?Name := value)
 (argument_list
   (argument
     (assignment_expression
       left: (identifier) @variable.parameter)))
+(argument
+  name: (identifier) @variable.parameter)
 
 ; Definition names (X := value). Only direct children of a block scope, so
 ; named arguments and archetype fields are excluded
@@ -142,9 +193,12 @@
 (enum_expression "enum" @keyword.type)
 (module_expression "module" @keyword.type)
 
-; Type definition names
+; Type definition names (with or without a specifier, e.g. Name<public> := ...)
 (assignment_expression
-  left: (identifier) @type
+  left: [
+    (identifier) @type
+    (decorated_expression operand: (identifier) @type)
+  ]
   right: [
     (class_expression)
     (struct_expression)
@@ -152,13 +206,21 @@
     (enum_expression)
   ])
 (assignment_expression
-  left: (identifier) @module
+  left: [
+    (identifier) @module
+    (decorated_expression operand: (identifier) @module)
+  ]
   right: (module_expression))
 
 ; Enum members
 (enum_expression
-  (braced_block
-    (identifier) @constant))
+  [
+    (braced_block (identifier) @constant.enumMember)
+    (indented_block (identifier) @constant.enumMember)
+    ; Qualified form, e.g. (enum_type:)Member
+    (braced_block (qualified_access name: (identifier) @constant.enumMember))
+    (indented_block (qualified_access name: (identifier) @constant.enumMember))
+  ])
 
 ; Archetypes
 (archetype_instantiation
@@ -194,6 +256,11 @@
   (supertype_clause (identifier) @type.builtin)
 ] (#match? @type.builtin "^(void|string|char|char32|int|rational|float|logic|any|comparable|type)$"))
 
+; Infer based on casing convention: `Container` in `for (Item:Container)` is not a type
+((type_annotation
+  type: (identifier) @variable)
+  (#match? @variable "^[A-Z]"))
+
 ; Function / constructor definition names. Handles F(), F<spec>(), F()<effect>, F<spec>()<effect>
 (function_definition
   signature: [
@@ -228,6 +295,14 @@
 (argument
   (type_annotation
     value: (identifier) @variable.parameter))
+; Optional named parameter, e.g. `?ReadProfile:?player_profile=false`
+(argument
+  (type_annotation
+    value: (optional_type (identifier) @variable.parameter)))
+(argument
+  (comparison_expression
+    left: (type_annotation
+      value: (optional_type (identifier) @variable.parameter))))
 
 ; Operator-named functions (e.g. operator'+')
 (function_definition
@@ -305,6 +380,17 @@
   name: (identifier) @attribute.visibility
   ">" @attribute.visibility.delimiter)
   (#match? @attribute.visibility "^(internal|public|private|protected|scoped)$"))
+
+; Scoped target inside a specifier, e.g. `scoped {GameSrc.A}` — a module path,
+; highlighted like a `using` namespace. Priority beats the per-identifier defaults.
+(specifier
+  name: (identifier)
+  (member_expression) @namespace
+  (#set! "priority" 105))
+(specifier
+  name: (identifier)
+  (identifier) @namespace
+  (#set! "priority" 105))
 
 ; Annotations (@-form)
 (annotation

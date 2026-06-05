@@ -9,8 +9,9 @@
   (argument_list)           ; call / subscript args spanning lines
 ] @indent.begin
 
-; Bare `=`-introduced body, starts on the same line
-(block_indent) @indent.begin (#set! indent.start_at_same_line 1)
+; Attempt at getting indent blocks to open
+(function_definition
+  body: (block_indent)) @indent.begin (#set! indent.start_at_same_line 1)
 
 [
   "}"
